@@ -1,6 +1,6 @@
 package com.rizz.wanderlist.data
 
-import com.rizz.wanderlist.model.PlaceCollection
+import com.rizz.wanderlist.domain.model.PlaceCollection
 
 object FakeData {
     val collections = listOf(

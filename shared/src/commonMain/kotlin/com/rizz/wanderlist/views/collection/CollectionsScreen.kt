@@ -12,19 +12,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.rizz.wanderlist.model.PlaceCollection
+import com.rizz.wanderlist.domain.model.PlaceCollection
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-@Preview
-fun CollectionsScreen(collections: List<PlaceCollection>) {
+fun CollectionsScreen(collections: List<PlaceCollection>, onAddClick: () -> Unit) {
     Scaffold(
         topBar = { TopAppBar(title = { Text("Wanderlist") }) },
         floatingActionButton = {
-            FloatingActionButton(onClick = { /* later */ }) { Text("+", fontSize = 24.sp) }
+            FloatingActionButton(onClick = onAddClick) { Text("+", fontSize = 24.sp) }
         }
     ) { padding ->
         LazyColumn(
@@ -40,7 +38,7 @@ fun CollectionsScreen(collections: List<PlaceCollection>) {
 }
 
 @Composable
-private fun CollectionCard(collection: PlaceCollection) {
+fun CollectionCard(collection: PlaceCollection) {
     val colors = collection.colors.map { Color(it) }
     val gradient = Brush.linearGradient(if (colors.size == 1) listOf(colors[0], colors[0]) else colors)
 

@@ -1,31 +1,36 @@
 package com.rizz.wanderlist
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.safeContentPadding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import com.rizz.wanderlist.data.FakeData
+import com.rizz.wanderlist.data.repository.InMemoryCollectionRepository
+import com.rizz.wanderlist.navigation.Screen
 import com.rizz.wanderlist.views.collection.CollectionsScreen
+import com.rizz.wanderlist.views.collection.CreateCollectionScreen
 import com.rizz.wanderlist.views.theme.WanderlistTheme
-import org.jetbrains.compose.resources.painterResource
-
-import wanderlist.shared.generated.resources.Res
-import wanderlist.shared.generated.resources.compose_multiplatform
+import kotlinx.coroutines.launch
 
 @Composable
-@Preview
 fun App() {
     WanderlistTheme {
-        CollectionsScreen(FakeData.collections)
+        val repository = remember { InMemoryCollectionRepository() }
+        val scope = rememberCoroutineScope()
+        val collections by repository.observeCollections().collectAsState(initial = emptyList())
+        var currentScreen by remember { mutableStateOf<Screen>(Screen.Collections) }
+
+        when (currentScreen) {
+            Screen.Collections -> CollectionsScreen(
+                collections = collections,
+                onAddClick = { currentScreen = Screen.CreateCollection }
+            )
+
+            Screen.CreateCollection -> CreateCollectionScreen(
+                onBack = { currentScreen = Screen.Collections },
+                onSave = { name, icon, colors ->
+                    scope.launch {
+                        repository.createCollection(name, icon, colors)
+                        currentScreen = Screen.Collections
+                    }
+                }
+            )
+        }
     }
 }
