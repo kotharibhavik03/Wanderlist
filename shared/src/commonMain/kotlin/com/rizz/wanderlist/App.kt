@@ -1,36 +1,32 @@
 package com.rizz.wanderlist
 
-import androidx.compose.runtime.*
-import com.rizz.wanderlist.data.repository.InMemoryCollectionRepository
-import com.rizz.wanderlist.navigation.Screen
-import com.rizz.wanderlist.views.collection.CollectionsScreen
-import com.rizz.wanderlist.views.collection.CreateCollectionScreen
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rizz.wanderlist.navigation.AppNavigation
+import com.rizz.wanderlist.views.auth.AuthUiState
+import com.rizz.wanderlist.views.auth.AuthViewModel
+import com.rizz.wanderlist.views.auth.SignInRoute
 import com.rizz.wanderlist.views.theme.WanderlistTheme
-import kotlinx.coroutines.launch
+import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun App() {
     WanderlistTheme {
-        val repository = remember { InMemoryCollectionRepository() }
-        val scope = rememberCoroutineScope()
-        val collections by repository.observeCollections().collectAsState(initial = emptyList())
-        var currentScreen by remember { mutableStateOf<Screen>(Screen.Collections) }
+        val authViewModel: AuthViewModel = koinViewModel()
+        val authState by authViewModel.uiState.collectAsStateWithLifecycle()
 
-        when (currentScreen) {
-            Screen.Collections -> CollectionsScreen(
-                collections = collections,
-                onAddClick = { currentScreen = Screen.CreateCollection }
-            )
-
-            Screen.CreateCollection -> CreateCollectionScreen(
-                onBack = { currentScreen = Screen.Collections },
-                onSave = { name, icon, colors ->
-                    scope.launch {
-                        repository.createCollection(name, icon, colors)
-                        currentScreen = Screen.Collections
-                    }
-                }
-            )
+        when (authState) {
+            AuthUiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            AuthUiState.SignedOut -> SignInRoute()
+            is AuthUiState.SignedIn -> AppNavigation(onSignOut = authViewModel::signOut)
         }
     }
 }
