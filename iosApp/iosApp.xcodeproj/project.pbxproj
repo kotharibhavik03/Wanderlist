@@ -7,38 +7,68 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		430549CA3089ECC600287B58 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 430549C93089ECC600287B58 /* GoogleSignIn */; };
-		430549CC3089ECC600287B58 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 430549CB3089ECC600287B58 /* GoogleSignInSwift */; };
-		430549CE3089EDA300287B58 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 430549CD3089EDA300287B58 /* GoogleService-Info.plist */; };
-		4354D9F23089F05100E845E8 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 4354D9F13089F05100E845E8 /* FirebaseAuth */; };
-		4354D9F43089F05100E845E8 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4354D9F33089F05100E845E8 /* FirebaseCore */; };
+		430549CA3089ECC600287B58 = {
+			isa = PBXBuildFile;
+			productRef = 430549C93089ECC600287B58;
+		};
+		430549CC3089ECC600287B58 = {
+			isa = PBXBuildFile;
+			productRef = 430549CB3089ECC600287B58;
+		};
+		430549CE3089EDA300287B58 = {
+			isa = PBXBuildFile;
+			fileRef = 430549CD3089EDA300287B58;
+		};
+		4354D9F23089F05100E845E8 = {
+			isa = PBXBuildFile;
+			productRef = 4354D9F13089F05100E845E8;
+		};
+		4354D9F43089F05100E845E8 = {
+			isa = PBXBuildFile;
+			productRef = 4354D9F33089F05100E845E8;
+		};
+		CB6C5CE31CA2603C586CDA82 = {
+			isa = PBXBuildFile;
+			productRef = AB09DCCEDD178DC87B28399C;
+		};
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		430549CD3089EDA300287B58 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
-		721259C6872BC0336A941C1E /* Wanderlist.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Wanderlist.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		430549CD3089EDA300287B58 = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.xml;
+			path = "GoogleService-Info.plist";
+			sourceTree = "<group>";
+		};
+		721259C6872BC0336A941C1E = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.application;
+			includeInIndex = 0;
+			path = Wanderlist.app;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		02894BD8904584932911EB34 /* Exceptions for "iosApp" folder in "iosApp" target */ = {
+		02894BD8904584932911EB34 = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = 809BB451B430417B9F6057D7 /* iosApp */;
+			target = 809BB451B430417B9F6057D7;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		4EF7E780A6884AED374D26AB /* Configuration */ = {
+		4EF7E780A6884AED374D26AB = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Configuration;
 			sourceTree = "<group>";
 		};
-		F571B1003D50CEC53792DCC0 /* iosApp */ = {
+		F571B1003D50CEC53792DCC0 = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				02894BD8904584932911EB34 /* Exceptions for "iosApp" folder in "iosApp" target */,
+				02894BD8904584932911EB34,
 			);
 			path = iosApp;
 			sourceTree = "<group>";
@@ -46,24 +76,25 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		F70E9C54B912DB6481B6A7E2 /* Frameworks */ = {
+		F70E9C54B912DB6481B6A7E2 = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				430549CA3089ECC600287B58 /* GoogleSignIn in Frameworks */,
-				4354D9F23089F05100E845E8 /* FirebaseAuth in Frameworks */,
-				4354D9F43089F05100E845E8 /* FirebaseCore in Frameworks */,
-				430549CC3089ECC600287B58 /* GoogleSignInSwift in Frameworks */,
+				430549CA3089ECC600287B58,
+				4354D9F23089F05100E845E8,
+				4354D9F43089F05100E845E8,
+				430549CC3089ECC600287B58,
+				CB6C5CE31CA2603C586CDA82,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		180CE6DF6F1FDBFEECF56E3D /* Products */ = {
+		180CE6DF6F1FDBFEECF56E3D = {
 			isa = PBXGroup;
 			children = (
-				721259C6872BC0336A941C1E /* Wanderlist.app */,
+				721259C6872BC0336A941C1E,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -71,47 +102,48 @@
 		28B18CA46890703F01F11C3B = {
 			isa = PBXGroup;
 			children = (
-				430549CD3089EDA300287B58 /* GoogleService-Info.plist */,
-				4EF7E780A6884AED374D26AB /* Configuration */,
-				F571B1003D50CEC53792DCC0 /* iosApp */,
-				180CE6DF6F1FDBFEECF56E3D /* Products */,
+				430549CD3089EDA300287B58,
+				4EF7E780A6884AED374D26AB,
+				F571B1003D50CEC53792DCC0,
+				180CE6DF6F1FDBFEECF56E3D,
 			);
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		809BB451B430417B9F6057D7 /* iosApp */ = {
+		809BB451B430417B9F6057D7 = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 9A81D5EC026A65A1ED11AC71 /* Build configuration list for PBXNativeTarget "iosApp" */;
+			buildConfigurationList = 9A81D5EC026A65A1ED11AC71;
 			buildPhases = (
-				C5139E28ECA4A785F27F920D /* Compile Kotlin Framework */,
-				7E6B760A7BBDEB382118D6DA /* Sources */,
-				F70E9C54B912DB6481B6A7E2 /* Frameworks */,
-				28367E46CBD7F3A1D6E6426E /* Resources */,
+				C5139E28ECA4A785F27F920D,
+				7E6B760A7BBDEB382118D6DA,
+				F70E9C54B912DB6481B6A7E2,
+				28367E46CBD7F3A1D6E6426E,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				F571B1003D50CEC53792DCC0 /* iosApp */,
+				F571B1003D50CEC53792DCC0,
 			);
 			name = iosApp;
 			packageProductDependencies = (
-				430549C93089ECC600287B58 /* GoogleSignIn */,
-				430549CB3089ECC600287B58 /* GoogleSignInSwift */,
-				4354D9F13089F05100E845E8 /* FirebaseAuth */,
-				4354D9F33089F05100E845E8 /* FirebaseCore */,
+				430549C93089ECC600287B58,
+				430549CB3089ECC600287B58,
+				4354D9F13089F05100E845E8,
+				4354D9F33089F05100E845E8,
+				AB09DCCEDD178DC87B28399C,
 			);
 			productName = iosApp;
-			productReference = 721259C6872BC0336A941C1E /* Wanderlist.app */;
+			productReference = 721259C6872BC0336A941C1E;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		CF29FD96C85DFAB8900F5ADF /* Project object */ = {
+		CF29FD96C85DFAB8900F5ADF = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
@@ -123,7 +155,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 1C27C6E5532FAC82F34C5E22 /* Build configuration list for PBXProject "iosApp" */;
+			buildConfigurationList = 1C27C6E5532FAC82F34C5E22;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -133,32 +165,33 @@
 			mainGroup = 28B18CA46890703F01F11C3B;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				430549C83089ECC600287B58 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
-				4354D9F03089F05100E845E8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				430549C83089ECC600287B58,
+				4354D9F03089F05100E845E8,
+				DF5F5935A9F79E44812AD24A,
 			);
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 180CE6DF6F1FDBFEECF56E3D /* Products */;
+			productRefGroup = 180CE6DF6F1FDBFEECF56E3D;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				809BB451B430417B9F6057D7 /* iosApp */,
+				809BB451B430417B9F6057D7,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		28367E46CBD7F3A1D6E6426E /* Resources */ = {
+		28367E46CBD7F3A1D6E6426E = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				430549CE3089EDA300287B58 /* GoogleService-Info.plist in Resources */,
+				430549CE3089EDA300287B58,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		C5139E28ECA4A785F27F920D /* Compile Kotlin Framework */ = {
+		C5139E28ECA4A785F27F920D = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -180,7 +213,7 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		7E6B760A7BBDEB382118D6DA /* Sources */ = {
+		7E6B760A7BBDEB382118D6DA = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -190,9 +223,9 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		95744D08436836270CAEEE87 /* Release */ = {
+		95744D08436836270CAEEE87 = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReferenceAnchor = 4EF7E780A6884AED374D26AB /* Configuration */;
+			baseConfigurationReferenceAnchor = 4EF7E780A6884AED374D26AB;
 			baseConfigurationReferenceRelativePath = Config.xcconfig;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -248,9 +281,9 @@
 			};
 			name = Release;
 		};
-		D073919969E342A96933F2B2 /* Debug */ = {
+		D073919969E342A96933F2B2 = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReferenceAnchor = 4EF7E780A6884AED374D26AB /* Configuration */;
+			baseConfigurationReferenceAnchor = 4EF7E780A6884AED374D26AB;
 			baseConfigurationReferenceRelativePath = Config.xcconfig;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -313,7 +346,7 @@
 			};
 			name = Debug;
 		};
-		EF0DB36BDC6A8E225EFF8927 /* Debug */ = {
+		EF0DB36BDC6A8E225EFF8927 = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = arm64;
@@ -345,7 +378,7 @@
 			};
 			name = Debug;
 		};
-		F0B4053A8C9AA53D9AE505F6 /* Release */ = {
+		F0B4053A8C9AA53D9AE505F6 = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = arm64;
@@ -380,28 +413,35 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		1C27C6E5532FAC82F34C5E22 /* Build configuration list for PBXProject "iosApp" */ = {
+		1C27C6E5532FAC82F34C5E22 = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				D073919969E342A96933F2B2 /* Debug */,
-				95744D08436836270CAEEE87 /* Release */,
+				D073919969E342A96933F2B2,
+				95744D08436836270CAEEE87,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		9A81D5EC026A65A1ED11AC71 /* Build configuration list for PBXNativeTarget "iosApp" */ = {
+		9A81D5EC026A65A1ED11AC71 = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				EF0DB36BDC6A8E225EFF8927 /* Debug */,
-				F0B4053A8C9AA53D9AE505F6 /* Release */,
+				EF0DB36BDC6A8E225EFF8927,
+				F0B4053A8C9AA53D9AE505F6,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		DF5F5935A9F79E44812AD24A = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = KotlinMultiplatformLinkedPackage;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
-		430549C83089ECC600287B58 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+		430549C83089ECC600287B58 = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
 			requirement = {
@@ -409,7 +449,7 @@
 				minimumVersion = 10.0.0;
 			};
 		};
-		4354D9F03089F05100E845E8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+		4354D9F03089F05100E845E8 = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
 			requirement = {
@@ -420,27 +460,31 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		430549C93089ECC600287B58 /* GoogleSignIn */ = {
+		430549C93089ECC600287B58 = {
 			isa = XCSwiftPackageProductDependency;
-			package = 430549C83089ECC600287B58 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			package = 430549C83089ECC600287B58;
 			productName = GoogleSignIn;
 		};
-		430549CB3089ECC600287B58 /* GoogleSignInSwift */ = {
+		430549CB3089ECC600287B58 = {
 			isa = XCSwiftPackageProductDependency;
-			package = 430549C83089ECC600287B58 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			package = 430549C83089ECC600287B58;
 			productName = GoogleSignInSwift;
 		};
-		4354D9F13089F05100E845E8 /* FirebaseAuth */ = {
+		4354D9F13089F05100E845E8 = {
 			isa = XCSwiftPackageProductDependency;
-			package = 4354D9F03089F05100E845E8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			package = 4354D9F03089F05100E845E8;
 			productName = FirebaseAuth;
 		};
-		4354D9F33089F05100E845E8 /* FirebaseCore */ = {
+		4354D9F33089F05100E845E8 = {
 			isa = XCSwiftPackageProductDependency;
-			package = 4354D9F03089F05100E845E8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			package = 4354D9F03089F05100E845E8;
 			productName = FirebaseCore;
+		};
+		AB09DCCEDD178DC87B28399C = {
+			isa = XCSwiftPackageProductDependency;
+			productName = KotlinMultiplatformLinkedPackage;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
-	rootObject = CF29FD96C85DFAB8900F5ADF /* Project object */;
+	rootObject = CF29FD96C85DFAB8900F5ADF;
 }

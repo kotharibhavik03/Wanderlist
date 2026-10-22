@@ -60,7 +60,11 @@ fun SignInScreen(
             if (isSigningIn) {
                 CircularProgressIndicator()
             } else {
-                GoogleSignInButton(modifier = Modifier.fillMaxWidth()) { onGoogleClick() }
+                GoogleSignInButton(
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                ) {
+                    onGoogleClick()
+                }
             }
 
             if (errorMessage != null) {
