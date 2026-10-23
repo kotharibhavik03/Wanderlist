@@ -19,4 +19,6 @@ captures
 node_modules/
 androidApp/google-services.json
 **/GoogleService-Info.plist
+.firebaserc
+.firebase/
 .swiftpm-locks/**/swiftPMCheckout/

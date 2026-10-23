@@ -1,6 +1,6 @@
 package com.rizz.wanderlist.di
 
-import com.rizz.wanderlist.data.repository.InMemoryCollectionRepository
+import com.rizz.wanderlist.data.firestore.FirestoreCollectionRepository
 import com.rizz.wanderlist.data.repository.InMemoryPlaceRepository
 import com.rizz.wanderlist.data.repository.KmpAuthRepository
 import com.rizz.wanderlist.domain.repository.AuthRepository
@@ -20,11 +20,14 @@ import com.rizz.wanderlist.views.home.HomeViewModel
 import com.rizz.wanderlist.views.place.AddPlaceViewModel
 import com.rizz.wanderlist.views.place.PlaceDetailViewModel
 import com.rizz.wanderlist.views.profile.ProfileViewModel
+import dev.gitlive.firebase.Firebase
+import dev.gitlive.firebase.firestore.firestore
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
 val appModule = module {
-    single<CollectionRepository> { InMemoryCollectionRepository() }
+    single { Firebase.firestore }
+    single<CollectionRepository> { FirestoreCollectionRepository(get(), get()) }
     factory { CreateCollectionUseCase(get()) }
     factory { DeleteCollectionUseCase(get(), get()) }
     factory { ObserveCollectionSummariesUseCase(get(), get()) }

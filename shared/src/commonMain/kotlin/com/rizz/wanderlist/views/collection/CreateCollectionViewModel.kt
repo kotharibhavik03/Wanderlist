@@ -19,7 +19,9 @@ data class CreateCollectionUiState(
     val icon: String = CollectionOptions.icons.first().value,
     val colors: List<Long> = listOf(CollectionOptions.colors.first().value),
     val error: CollectionError? = null,
-    val isSaving: Boolean = false
+    val isSaving: Boolean = false,
+    /** Saving failed after validation passed; shown once in a snackbar. */
+    val saveErrorMessage: String? = null
 ) {
     val canSave: Boolean get() = name.isNotBlank() && !isSaving
 }
@@ -72,7 +74,13 @@ class CreateCollectionViewModel(
                 }
                 is CreateCollectionResult.Invalid ->
                     _uiState.update { it.copy(isSaving = false, error = result.error) }
+                is CreateCollectionResult.Failed ->
+                    _uiState.update { it.copy(isSaving = false, saveErrorMessage = result.message) }
             }
         }
+    }
+
+    fun onSaveErrorShown() {
+        _uiState.update { it.copy(saveErrorMessage = null) }
     }
 }

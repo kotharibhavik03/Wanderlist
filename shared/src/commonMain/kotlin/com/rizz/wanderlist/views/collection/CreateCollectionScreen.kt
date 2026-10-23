@@ -26,11 +26,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,7 +76,8 @@ fun CreateCollectionRoute(
         onNameChange = viewModel::onNameChange,
         onIconSelected = viewModel::onIconSelected,
         onColorToggled = viewModel::onColorToggled,
-        onSaveClick = viewModel::onSaveClick
+        onSaveClick = viewModel::onSaveClick,
+        onSaveErrorShown = viewModel::onSaveErrorShown
     )
 }
 
@@ -85,9 +89,19 @@ fun CreateCollectionScreen(
     onNameChange: (String) -> Unit,
     onIconSelected: (String) -> Unit,
     onColorToggled: (Long) -> Unit,
-    onSaveClick: () -> Unit
+    onSaveClick: () -> Unit,
+    onSaveErrorShown: () -> Unit
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(uiState.saveErrorMessage) {
+        uiState.saveErrorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            onSaveErrorShown()
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("New collection") },

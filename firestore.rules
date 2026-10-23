@@ -1,0 +1,47 @@
+rules_version = '2';
+
+// Wanderlist security rules. These are the real access control: the app hides what a user
+// can't do, but only these rules stop it. Deploy after every change (see README).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Reserved for a per-user profile document.
+    match /users/{userId}/{document=**} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    // collections/{collectionId}: private to its owner. People a place is shared with
+    // never see the collection it belongs to.
+    match /collections/{collectionId} {
+
+      // Field names and limits mirror CollectionDocument and CreateCollectionUseCase.
+      function isValidCollection(data) {
+        return data.keys().hasOnly(['ownerId', 'name', 'icon', 'colors', 'createdAt'])
+          && data.name is string && data.name.size() > 0 && data.name.size() <= 40
+          && data.icon is string && data.icon.size() > 0 && data.icon.size() <= 16
+          && data.colors is list && data.colors.size() > 0 && data.colors.size() <= 10
+          && data.createdAt is int;
+      }
+
+      // Also governs queries: a list query must filter on ownerId == the caller's uid.
+      allow read: if signedIn() && resource.data.ownerId == request.auth.uid;
+
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && isValidCollection(request.resource.data);
+
+      // Ownership can't be handed to someone else.
+      allow update: if signedIn()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId
+        && isValidCollection(request.resource.data);
+
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+    }
+  }
+}

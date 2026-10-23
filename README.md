@@ -23,7 +23,7 @@ A travel journal for Android and iOS, built from one Kotlin Multiplatform codeba
 - **Clean Architecture** (domain / data / views) with **MVVM**: `StateFlow` UI state, `Channel` for one-shot events
 - **Navigation 3** with a serializable `Route` back stack
 - **Koin** for dependency injection
-- **Firebase Auth** via **KMPAuth** (Google sign-in)
+- **Firebase Auth** via **KMPAuth** (Google sign-in) and **Cloud Firestore** via the GitLive Firebase Kotlin SDK, with security rules in `firestore.rules`
 - Coroutines and kotlinx.serialization
 
 ## Project layout
@@ -42,6 +42,12 @@ The Firebase config files are not committed. Create your own Firebase project wi
 - `iosApp/GoogleService-Info.plist`
 
 and replace the Google OAuth client IDs with your project's: the web client ID in `shared/src/commonMain/kotlin/com/rizz/wanderlist/config/AuthConfig.kt`, and `GIDClientID` plus the reversed-client-ID URL scheme in `iosApp/iosApp/Info.plist`.
+
+Create a Firestore database in the same project (production mode), then deploy the security rules in `firestore.rules`, either by pasting them into Firebase console → Firestore → Rules, or with the [Firebase CLI](https://firebase.google.com/docs/cli):
+
+```sh
+firebase deploy --only firestore:rules --project <your-project-id>
+```
 
 Then:
 
