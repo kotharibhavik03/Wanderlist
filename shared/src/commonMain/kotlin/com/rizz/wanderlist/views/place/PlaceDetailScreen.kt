@@ -72,7 +72,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rizz.wanderlist.domain.model.Place
 import com.rizz.wanderlist.domain.model.PlaceAccess
 import com.rizz.wanderlist.domain.model.PlaceCollection
-import com.rizz.wanderlist.domain.model.PlaceMember
 import com.rizz.wanderlist.domain.model.PlacePhoto
 import com.rizz.wanderlist.util.DirectionsApp
 import com.rizz.wanderlist.util.directionsApps
@@ -176,7 +175,7 @@ fun PlaceDetailScreen(
                 DirectionsButton(uiState.place, snackbarHostState)
                 DetailsCard(uiState.place, uiState.collection)
                 PhotosSection(uiState.place.photos)
-                PeopleSection(uiState.place.members, uiState.access)
+                PeopleSection(uiState.people)
                 when {
                     uiState.canDelete -> RemoveButton(RemoveAction.DELETE, uiState.isBusy) {
                         pendingAction = RemoveAction.DELETE
@@ -444,31 +443,59 @@ private fun PhotosSection(photos: List<PlacePhoto>) {
 }
 
 @Composable
-private fun PeopleSection(members: List<PlaceMember>, access: PlaceAccess) {
+private fun PeopleSection(people: List<PlacePerson>) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionTitle("People")
-        if (members.isEmpty()) {
+        SectionTitle("People (${people.size})")
+        people.forEach { PersonRow(it) }
+        if (people.size == 1 && people.first().isYou) {
             Text(
-                if (access == PlaceAccess.OWNER) "Not shared with anyone." else "No one else has been added.",
+                "Not shared with anyone yet.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        members.forEach { member ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Column {
-                    Text(member.displayName ?: member.email, style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        member.role.title(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+    }
+}
+
+/** Name on top and email underneath; the role as a badge on the right. */
+@Composable
+private fun PersonRow(person: PlacePerson) {
+    // Without a published name (not joined yet), the email is the best label.
+    val primary = person.name ?: person.email ?: "Unknown"
+    val secondary = when {
+        !person.hasJoined -> "Hasn't joined yet"
+        person.name != null -> person.email
+        else -> null
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                if (person.isYou) "$primary (you)" else primary,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            secondary?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
+        Badge(person.role.label())
     }
+}
+
+private fun PlaceAccess.label(): String = when (this) {
+    PlaceAccess.OWNER -> "Owner"
+    PlaceAccess.COLLABORATOR -> "Collaborator"
+    PlaceAccess.VISITED_WITH -> "Visited with"
 }

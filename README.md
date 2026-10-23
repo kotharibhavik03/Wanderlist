@@ -2,7 +2,7 @@
 
 A travel journal for Android and iOS, built from one Kotlin Multiplatform codebase with Compose Multiplatform. Save the places you've been to or want to visit, group them into collections, attach photos, and share individual places with the people you went with.
 
-> **Status:** work in progress. Sign-in, collections and adding places work. Data is currently held in memory; Firestore, Google Maps and photo uploads come next.
+> **Status:** work in progress. Sign-in, collections, places and sharing work and are stored in Cloud Firestore. Google Maps and photo uploads come next.
 
 ## Features
 
@@ -10,12 +10,13 @@ A travel journal for Android and iOS, built from one Kotlin Multiplatform codeba
 |---|---|
 | Google sign-in (Android + iOS) | Done |
 | Collections with an emoji icon and multi-colour gradient | Done |
-| Places: name, notes, coordinates, address, Wishlist / Visited, visit date, 1–5 rating | Done (in-memory) |
-| Collection page with places and an "All photos" grid | Done (in-memory) |
+| Places: name, notes, coordinates, address, Wishlist / Visited, visit date, 1–5 rating | Done |
+| Collection page with places and an "All photos" grid | Done |
+| Edit, move between collections, and delete places; delete collections | Done |
 | Google Maps with custom markers, pin-drop location picker | Planned |
 | Photos per place, with private photos visible only to their uploader | Planned |
-| Share a place by email as Collaborator or "Visited with" | Planned |
-| Directions via Google Maps / Apple Maps | Planned |
+| Share a place by email as Collaborator or "Visited with"; "Shared with me"; leave a place | Done |
+| Directions via Google Maps / Apple Maps | Done |
 
 ## Tech stack
 

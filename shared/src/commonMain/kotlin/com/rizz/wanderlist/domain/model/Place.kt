@@ -3,6 +3,9 @@ package com.rizz.wanderlist.domain.model
 data class Place(
     val id: String,
     val ownerId: String,
+    /** Copied from the owner's account when the place is created, so people it's shared with can see who added them. */
+    val ownerName: String? = null,
+    val ownerEmail: String? = null,
     val collectionId: String,
     val actualName: String,          // name from the map
     val customName: String,          // the user's own name; may be blank

@@ -15,6 +15,26 @@ service cloud.firestore {
       allow read, write: if signedIn() && request.auth.uid == userId;
     }
 
+    // profiles/{email}: a user's public name and photo, keyed by their lowercase email so
+    // people on a shared place can see each other's names.
+    match /profiles/{email} {
+      // Read one profile whose email you already know. No list: nobody can enumerate users.
+      allow get: if signedIn();
+
+      // Only the owner of that email publishes it, and only these fields.
+      allow create, update: if signedIn()
+        && request.auth.token.email.lower() == email
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'photoUrl', 'updatedAt'])
+        && request.resource.data.uid == request.auth.uid
+        && (request.resource.data.get('name', null) == null
+            || (request.resource.data.name is string && request.resource.data.name.size() <= 200))
+        && (request.resource.data.get('photoUrl', null) == null
+            || (request.resource.data.photoUrl is string && request.resource.data.photoUrl.size() <= 2000))
+        && request.resource.data.updatedAt is int;
+
+      allow delete: if signedIn() && request.auth.token.email.lower() == email;
+    }
+
     // collections/{collectionId}: private to its owner. People a place is shared with
     // never see the collection it belongs to.
     match /collections/{collectionId} {
@@ -40,6 +60,100 @@ service cloud.firestore {
         && resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerId == resource.data.ownerId
         && isValidCollection(request.resource.data);
+
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // places/{placeId}: readable by its owner and by people it is shared with (by email).
+    //   owner        - everything, including moving it to another of their collections
+    //   collaborator - the place itself, but not its collection or its people
+    //   any member   - leave, removing only themselves
+    //   delete       - owner only
+    match /places/{placeId} {
+
+      function myEmail() {
+        return request.auth.token.email.lower();
+      }
+
+      function ownsCollection(collectionId) {
+        return get(/databases/$(database)/documents/collections/$(collectionId)).data.ownerId
+          == request.auth.uid;
+      }
+
+      // Field names and limits mirror PlaceDocument and validatePlaceDetails.
+      function isValidPlace(data) {
+        return data.keys().hasOnly([
+            'ownerId', 'ownerName', 'ownerEmail', 'collectionId', 'actualName', 'customName', 'address',
+            'latitude', 'longitude', 'status', 'visitedOn', 'rating', 'notes', 'marker',
+            'members', 'memberEmails', 'collaboratorEmails', 'createdAt', 'updatedAt'
+          ])
+          && data.ownerId is string
+          && (data.get('ownerName', null) == null
+              || (data.ownerName is string && data.ownerName.size() <= 200))
+          && (data.get('ownerEmail', null) == null || data.ownerEmail is string)
+          && data.collectionId is string
+          && data.actualName is string && data.actualName.size() <= 200
+          && data.customName is string && data.customName.size() <= 200
+          && (data.get('address', null) == null
+              || (data.address is string && data.address.size() <= 500))
+          && data.latitude is number && data.latitude >= -90 && data.latitude <= 90
+          && data.longitude is number && data.longitude >= -180 && data.longitude <= 180
+          && data.status in ['WISHLIST', 'VISITED']
+          && (data.get('visitedOn', null) == null || data.visitedOn is int)
+          && (data.get('rating', null) == null
+              || (data.rating is int && data.rating >= 1 && data.rating <= 5))
+          // A place you want to visit has no visit date or rating.
+          && (data.status == 'VISITED'
+              || (data.get('visitedOn', null) == null && data.get('rating', null) == null))
+          && data.notes is string && data.notes.size() <= 2000
+          && data.marker is map
+          && data.members is list && data.members.size() <= 50
+          && data.memberEmails is list && data.memberEmails.size() == data.members.size()
+          && data.collaboratorEmails is list
+          && data.collaboratorEmails.size() <= data.memberEmails.size()
+          && data.createdAt is int && data.updatedAt is int;
+      }
+
+      function changedOnly(fields) {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+      }
+
+      // Also governs queries: a list query must filter on ownerId == uid or
+      // memberEmails array-contains the caller's email.
+      allow read: if signedIn()
+        && (resource.data.ownerId == request.auth.uid || myEmail() in resource.data.memberEmails);
+
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        // The owner email shown to invitees must be the creator's own sign-in email.
+        && (request.resource.data.get('ownerEmail', null) == null
+            || request.resource.data.ownerEmail == myEmail())
+        && isValidPlace(request.resource.data)
+        && ownsCollection(request.resource.data.collectionId);
+
+      allow update: if signedIn()
+        && isValidPlace(request.resource.data)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.get('ownerName', null) == resource.data.get('ownerName', null)
+        && request.resource.data.get('ownerEmail', null) == resource.data.get('ownerEmail', null)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (
+          // Owner: anything; a different collection must also be theirs.
+          (resource.data.ownerId == request.auth.uid
+            && (request.resource.data.collectionId == resource.data.collectionId
+                || ownsCollection(request.resource.data.collectionId)))
+          // Collaborator: the place's own details only.
+          || (myEmail() in resource.data.collaboratorEmails
+            && changedOnly(['actualName', 'customName', 'address', 'latitude', 'longitude',
+                            'status', 'visitedOn', 'rating', 'notes', 'marker', 'updatedAt']))
+          // Any member: leave, removing exactly themselves.
+          || (myEmail() in resource.data.memberEmails
+            && changedOnly(['members', 'memberEmails', 'collaboratorEmails', 'updatedAt'])
+            && request.resource.data.memberEmails == resource.data.memberEmails.removeAll([myEmail()])
+            && request.resource.data.collaboratorEmails
+                 == resource.data.collaboratorEmails.removeAll([myEmail()])
+            && request.resource.data.members.size() == resource.data.members.size() - 1)
+        );
 
       allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
     }

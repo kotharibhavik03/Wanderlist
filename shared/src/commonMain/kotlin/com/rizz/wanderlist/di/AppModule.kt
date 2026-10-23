@@ -1,11 +1,13 @@
 package com.rizz.wanderlist.di
 
 import com.rizz.wanderlist.data.firestore.FirestoreCollectionRepository
-import com.rizz.wanderlist.data.repository.InMemoryPlaceRepository
+import com.rizz.wanderlist.data.firestore.FirestorePlaceRepository
+import com.rizz.wanderlist.data.firestore.FirestoreProfileRepository
 import com.rizz.wanderlist.data.repository.KmpAuthRepository
 import com.rizz.wanderlist.domain.repository.AuthRepository
 import com.rizz.wanderlist.domain.repository.CollectionRepository
 import com.rizz.wanderlist.domain.repository.PlaceRepository
+import com.rizz.wanderlist.domain.repository.ProfileRepository
 import com.rizz.wanderlist.domain.usecase.CreateCollectionUseCase
 import com.rizz.wanderlist.domain.usecase.DeleteCollectionUseCase
 import com.rizz.wanderlist.domain.usecase.ObserveCollectionSummariesUseCase
@@ -35,17 +37,18 @@ val appModule = module {
     viewModel { CreateCollectionViewModel(get()) }
 
     single<AuthRepository> { KmpAuthRepository() }
-    viewModel { AuthViewModel(get()) }
+    single<ProfileRepository> { FirestoreProfileRepository(get()) }
+    viewModel { AuthViewModel(get(), get()) }
     viewModel { ProfileViewModel(get()) }
     viewModel { HomeViewModel(get(), get(), get()) }
     viewModel { SignInViewModel() }
 
     viewModel { AddPlaceViewModel(get(), get(), get(), get(), get()) }
 
-    single<PlaceRepository> { InMemoryPlaceRepository(get()) }
+    single<PlaceRepository> { FirestorePlaceRepository(get(), get()) }
     factory { SavePlaceUseCase(get()) }
     factory { UpdatePlaceUseCase(get()) }
     viewModel { (collectionId: String) -> CollectionDetailViewModel(collectionId, get(), get(), get()) }
-    viewModel { (placeId: String) -> PlaceDetailViewModel(placeId, get(), get(), get()) }
+    viewModel { (placeId: String) -> PlaceDetailViewModel(placeId, get(), get(), get(), get()) }
 
 }
