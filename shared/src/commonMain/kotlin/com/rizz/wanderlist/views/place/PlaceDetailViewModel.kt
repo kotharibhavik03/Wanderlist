@@ -45,6 +45,8 @@ import kotlinx.coroutines.launch
 data class PlacePerson(
     val name: String?,
     val email: String?,
+    /** Their profile photo, if they have one. */
+    val photoUrl: String?,
     val role: PlaceAccess,
     val isYou: Boolean,
     /** False for someone invited by email who hasn't signed in to Wanderlist yet. */
@@ -327,6 +329,7 @@ class PlaceDetailViewModel(
                 ?: place.ownerName
                 ?: user.displayName.takeIf { ownerIsMe },
             email = ownerEmail,
+            photoUrl = ownerEmail?.let { profiles[it]?.photoUrl } ?: user.photoUrl.takeIf { ownerIsMe },
             role = PlaceAccess.OWNER,
             isYou = ownerIsMe,
             hasJoined = true
@@ -339,6 +342,7 @@ class PlaceDetailViewModel(
             PlacePerson(
                 name = profile?.name ?: user.displayName.takeIf { isYou },
                 email = member.email,
+                photoUrl = profile?.photoUrl ?: user.photoUrl.takeIf { isYou },
                 role = if (member.role == MemberRole.COLLABORATOR) PlaceAccess.COLLABORATOR else PlaceAccess.VISITED_WITH,
                 isYou = isYou,
                 hasJoined = profile != null || isYou

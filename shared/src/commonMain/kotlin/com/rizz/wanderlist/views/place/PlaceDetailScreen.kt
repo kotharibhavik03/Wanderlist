@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -81,6 +80,7 @@ import com.rizz.wanderlist.views.photo.PhotoTile
 import com.rizz.wanderlist.views.photo.PhotoViewer
 import com.rizz.wanderlist.views.photo.ViewerPhoto
 import com.rizz.wanderlist.views.photo.rememberPhotoPicker
+import com.rizz.wanderlist.views.profile.UserAvatar
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -546,7 +546,7 @@ private fun PersonRow(person: PlacePerson) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        UserAvatar(name = person.name, email = person.email, photoUrl = person.photoUrl, size = 40.dp)
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 if (person.isYou) "$primary (you)" else primary,

@@ -7,6 +7,26 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    // profiles/{uid}/{photoId}.jpg: profile photos people upload. Everyone else loads them from
+    // the download URL in the owner's Firestore profile.
+    match /profiles/{uid}/{fileName} {
+
+      function isOwner() {
+        return request.auth != null && request.auth.uid == uid;
+      }
+
+      allow read: if isOwner();
+
+      // New files only, compressed JPEGs under 5 MB (same as place photos).
+      allow create: if isOwner()
+        && resource == null
+        && fileName.matches('[A-Za-z0-9_-]+[.]jpg')
+        && request.resource.contentType == 'image/jpeg'
+        && request.resource.size < 5 * 1024 * 1024;
+
+      allow delete: if isOwner();
+    }
+
     // places/{placeId}/{uploaderId}/{photoId}.jpg: everyone writes only in their own folder.
     match /places/{placeId}/{uploaderId}/{fileName} {
 
@@ -29,6 +49,7 @@ service firebase.storage {
 
       // New files only (an existing file can't be overwritten), compressed JPEGs under 5 MB.
       allow create: if isUploader()
+        && resource == null
         && fileName.matches('[A-Za-z0-9_-]+[.]jpg')
         && request.resource.contentType == 'image/jpeg'
         && request.resource.size < 5 * 1024 * 1024;

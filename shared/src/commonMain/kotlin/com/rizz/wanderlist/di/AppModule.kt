@@ -45,9 +45,9 @@ val appModule = module {
     viewModel { params -> CollectionFormViewModel(params.getOrNull(), get(), get()) }
 
     single<AuthRepository> { KmpAuthRepository() }
-    single<ProfileRepository> { FirestoreProfileRepository(get()) }
+    single<ProfileRepository> { FirestoreProfileRepository(get(), get(), get()) }
     viewModel { AuthViewModel(get(), get()) }
-    viewModel { ProfileViewModel(get()) }
+    viewModel { ProfileViewModel(get(), get(), get()) }
     factory { SearchLocationsUseCase(get()) }
     viewModel { HomeViewModel(get(), get(), get(), get(), get()) }
     viewModel { MapPickerViewModel(get(), get(), get()) }

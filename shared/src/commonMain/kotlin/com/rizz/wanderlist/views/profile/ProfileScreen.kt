@@ -1,8 +1,10 @@
 package com.rizz.wanderlist.views.profile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,27 +17,31 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.rizz.wanderlist.domain.model.User
+import com.rizz.wanderlist.views.photo.rememberPhotoPicker
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -44,14 +50,37 @@ fun ProfileRoute(
     viewModel: ProfileViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    ProfileScreen(uiState = uiState, onSignOut = onSignOut)
+    val photoPicker = rememberPhotoPicker(maxItems = 1, onPicked = viewModel::onPhotoPicked)
+    ProfileScreen(
+        uiState = uiState,
+        onChangePhoto = photoPicker::launch,
+        onUseAccountPhoto = viewModel::onUseAccountPhoto,
+        onMessageShown = viewModel::onMessageShown,
+        onSignOut = onSignOut
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileScreen(uiState: ProfileUiState, onSignOut: () -> Unit) {
+fun ProfileScreen(
+    uiState: ProfileUiState,
+    onChangePhoto: () -> Unit,
+    onUseAccountPhoto: () -> Unit,
+    onMessageShown: () -> Unit,
+    onSignOut: () -> Unit
+) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val message = (uiState as? ProfileUiState.Content)?.message
+    LaunchedEffect(message) {
+        message?.let {
+            snackbarHostState.showSnackbar(it)
+            onMessageShown()
+        }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = { TopAppBar(title = { Text("Profile") }) }
     ) { padding ->
         when (uiState) {
@@ -68,7 +97,7 @@ fun ProfileScreen(uiState: ProfileUiState, onSignOut: () -> Unit) {
                     .padding(horizontal = 24.dp, vertical = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                InitialsAvatar(uiState.user, size = 96.dp)
+                EditableAvatar(uiState, onChangePhoto)
                 Spacer(Modifier.height(16.dp))
                 Text(
                     uiState.user.displayName ?: "Wanderlist traveller",
@@ -89,7 +118,18 @@ fun ProfileScreen(uiState: ProfileUiState, onSignOut: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
                 )
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onChangePhoto, enabled = !uiState.isUpdatingPhoto) {
+                        Text("Change photo")
+                    }
+                    if (uiState.hasCustomPhoto) {
+                        TextButton(onClick = onUseAccountPhoto, enabled = !uiState.isUpdatingPhoto) {
+                            Text("Use Google photo")
+                        }
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
                 OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
@@ -100,35 +140,31 @@ fun ProfileScreen(uiState: ProfileUiState, onSignOut: () -> Unit) {
     }
 }
 
-/**
- * The user's initials in a circle. Stands in for the Google profile photo until image
- * loading (Coil) arrives with the photo step. Decorative: the name is read right after it.
- */
+/** The profile photo with a camera button on its edge; a spinner covers it while it changes. */
 @Composable
-private fun InitialsAvatar(user: User, size: Dp) {
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primaryContainer)
-            .clearAndSetSemantics { },
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            initialsOf(user),
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            fontSize = (size.value * 0.38f).sp,
-            fontWeight = FontWeight.SemiBold
+private fun EditableAvatar(uiState: ProfileUiState.Content, onChangePhoto: () -> Unit) {
+    Box {
+        UserAvatar(
+            name = uiState.user.displayName,
+            email = uiState.user.email,
+            photoUrl = uiState.photoUrl,
+            size = 112.dp
         )
+        if (uiState.isUpdatingPhoto) {
+            Box(
+                modifier = Modifier
+                    .size(112.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.4f)),
+                contentAlignment = Alignment.Center
+            ) { CircularProgressIndicator(color = Color.White) }
+        }
+        FilledTonalIconButton(
+            onClick = onChangePhoto,
+            enabled = !uiState.isUpdatingPhoto,
+            modifier = Modifier.align(Alignment.BottomEnd)
+        ) {
+            Icon(Icons.Default.PhotoCamera, contentDescription = "Change profile photo")
+        }
     }
-}
-
-/** "Ada Lovelace" → "AL", "Ada" → "A", no name → first letter of the email, else "?". */
-private fun initialsOf(user: User): String {
-    val fromName = user.displayName.orEmpty()
-        .split(" ")
-        .filter { it.isNotBlank() }
-        .take(2)
-        .joinToString("") { it.first().uppercase() }
-    return fromName.ifEmpty { user.email?.firstOrNull()?.uppercase() ?: "?" }
 }

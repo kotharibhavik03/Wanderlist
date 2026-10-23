@@ -2,10 +2,12 @@ package com.rizz.wanderlist.domain.model
 
 /**
  * The public part of a user, looked up by email so people on a shared place can see each
- * other's names. Each user publishes their own when they sign in.
+ * other's names and photos. Each user publishes their own when they sign in.
  */
 data class UserProfile(
     val email: String,
     val name: String?,
-    val photoUrl: String?
+    val photoUrl: String?,
+    /** The photo is one the user uploaded, not their Google account's. */
+    val hasCustomPhoto: Boolean = false
 )
