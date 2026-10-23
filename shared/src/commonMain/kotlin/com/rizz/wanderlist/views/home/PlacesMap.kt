@@ -3,6 +3,7 @@ package com.rizz.wanderlist.views.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -20,16 +21,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import com.rizz.wanderlist.views.place.PlaceMarker
+import com.rizz.wanderlist.views.theme.DarkMapStyleJson
+import com.rizz.wanderlist.views.theme.isDark
 import eu.buney.maps.CameraPosition
 import eu.buney.maps.CameraUpdate
 import eu.buney.maps.CameraUpdateFactory
 import eu.buney.maps.GoogleMap
 import eu.buney.maps.LatLng
 import eu.buney.maps.LatLngBounds
+import eu.buney.maps.MapProperties
+import eu.buney.maps.MapStyleOptions
 import eu.buney.maps.MapUiSettings
 import eu.buney.maps.MarkerComposable
 import eu.buney.maps.rememberCameraPositionState
@@ -46,10 +50,16 @@ private const val SinglePlaceZoom = 12f
 internal fun PlacesMap(
     places: List<HomePlace>,
     onMarkerClick: (placeId: String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Space taken by controls drawn over the map. Framing and Google's logo stay clear of it. */
+    contentPadding: PaddingValues = PaddingValues()
 ) {
     val cameraState = rememberCameraPositionState { position = WorldView }
     var mapLoaded by remember { mutableStateOf(false) }
+    val isDark = MaterialTheme.isDark
+    val properties = remember(isDark) {
+        MapProperties(mapStyleOptions = if (isDark) MapStyleOptions.fromJson(DarkMapStyleJson) else null)
+    }
 
     // Frame the visible places whenever the set changes (first load, a filter chip, a new place).
     // Only after the map has loaded: framing bounds on a map with no size crashes on Android.
@@ -58,10 +68,12 @@ internal fun PlacesMap(
         if (mapLoaded && places.isNotEmpty()) cameraState.animate(cameraUpdateFor(places))
     }
 
-    Box(modifier = modifier.clip(MaterialTheme.shapes.large)) {
+    Box(modifier = modifier) {
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraState,
+            properties = properties,
+            contentPadding = contentPadding,
             uiSettings = MapUiSettings(
                 mapToolbarEnabled = false,
                 zoomControlsEnabled = false,
@@ -91,7 +103,12 @@ internal fun PlacesMap(
         }
 
         if (places.isEmpty()) {
-            EmptyMapHint(modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp))
+            EmptyMapHint(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(contentPadding)
+                    .padding(16.dp)
+            )
         }
     }
 }

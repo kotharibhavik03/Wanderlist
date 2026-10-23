@@ -1,7 +1,12 @@
 
 package com.rizz.wanderlist.navigation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -14,10 +19,13 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
@@ -37,6 +45,11 @@ import com.rizz.wanderlist.views.profile.ProfileRoute
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import org.koin.compose.viewmodel.koinViewModel
+
+/** The floating bottom bar's corner radius and its gaps to the screen edges. */
+private val BottomBarCornerRadius = 24.dp
+private val BottomBarHorizontalMargin = 12.dp
+private val BottomBarVerticalMargin = 8.dp
 
 private val navConfig = SavedStateConfiguration {
     serializersModule = SerializersModule {
@@ -86,70 +99,84 @@ fun AppNavigation(onSignOut: () -> Unit) {
     }
 
     Scaffold(
+        // The frame reserves only the bottom bar. Each screen handles the status bar itself, so
+        // Home's map can draw behind it; screens with a top app bar get the inset from that bar.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (showBottomBar) {
-
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface
+                // A floating bar: rounded, clear of the screen edges and of the system navigation area.
+                Surface(
+                    shape = RoundedCornerShape(BottomBarCornerRadius),
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = 3.dp,
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .padding(horizontal = BottomBarHorizontalMargin, vertical = BottomBarVerticalMargin)
                 ) {
-                    val itemColors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primary.copy(
-                            alpha = 0.12f
-                        ),
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        // The system navigation inset is already outside the bar, as margin.
+                        windowInsets = WindowInsets(0, 0, 0, 0)
+                    ) {
+                        val itemColors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primary.copy(
+                                alpha = 0.12f
+                            ),
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
 
-                    NavigationBarItem(
-                        selected = currentRoute is Route.Collections,
-                        onClick = {
-                            navigateToTab(backStack, Route.Collections)
-                        },
-                        icon = {
-                            Icon(
-                                Icons.Default.Folder,
-                                contentDescription = null
-                            )
-                        },
-                        label = { Text("Collections") },
-                        colors = itemColors
-                    )
+                        NavigationBarItem(
+                            selected = currentRoute is Route.Collections,
+                            onClick = {
+                                navigateToTab(backStack, Route.Collections)
+                            },
+                            icon = {
+                                Icon(
+                                    Icons.Default.Folder,
+                                    contentDescription = null
+                                )
+                            },
+                            label = { Text("Collections") },
+                            colors = itemColors
+                        )
 
-                    NavigationBarItem(
-                        selected = currentRoute is Route.Home,
-                        onClick = {
-                            navigateToTab(backStack, Route.Home)
-                        },
-                        icon = {
-                            Icon(Icons.Default.Map, contentDescription = null)
-                        },
-                        label = { Text("Map") },
-                        colors = itemColors
-                    )
+                        NavigationBarItem(
+                            selected = currentRoute is Route.Home,
+                            onClick = {
+                                navigateToTab(backStack, Route.Home)
+                            },
+                            icon = {
+                                Icon(Icons.Default.Map, contentDescription = null)
+                            },
+                            label = { Text("Map") },
+                            colors = itemColors
+                        )
 
-                    NavigationBarItem(
-                        selected = currentRoute is Route.Profile,
-                        onClick = {
-                            navigateToTab(backStack, Route.Profile)
-                        },
-                        icon = {
-                            Icon(Icons.Default.Person, contentDescription = null)
-                        },
-                        label = { Text("Profile") },
-                        colors = itemColors
-                    )
+                        NavigationBarItem(
+                            selected = currentRoute is Route.Profile,
+                            onClick = {
+                                navigateToTab(backStack, Route.Profile)
+                            },
+                            icon = {
+                                Icon(Icons.Default.Person, contentDescription = null)
+                            },
+                            label = { Text("Profile") },
+                            colors = itemColors
+                        )
+                    }
                 }
             }
         }
     ) { innerPadding ->
+        // Content draws behind the floating bottom bar. Each tab decides how to keep clear of it:
+        // Home lets its map run underneath, the other tabs sit above it (AboveBottomBar).
+        val bottomBarPadding = innerPadding.calculateBottomPadding()
         NavDisplay(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .consumeWindowInsets(innerPadding),
+            modifier = Modifier.fillMaxSize(),
             backStack = backStack,
             onBack = goBack,
             entryDecorators = listOf(
@@ -159,17 +186,20 @@ fun AppNavigation(onSignOut: () -> Unit) {
             entryProvider = entryProvider {
                 entry<Route.Home> {
                     HomeRoute(
+                        bottomBarPadding = bottomBarPadding,
                         onAddClick = { backStack.add(Route.AddPlace) },
                         onPlaceClick = { id -> backStack.add(Route.PlaceDetail(id)) }
                     )
                 }
 
                 entry<Route.Collections> {
-                    CollectionsRoute(
-                        onAddClick = { backStack.add(Route.CreateCollection) },
-                        onCollectionClick = { id -> backStack.add(Route.CollectionDetail(id)) },
-                        onSharedPlaceClick = { id -> backStack.add(Route.PlaceDetail(id)) }
-                    )
+                    AboveBottomBar(bottomBarPadding) {
+                        CollectionsRoute(
+                            onAddClick = { backStack.add(Route.CreateCollection) },
+                            onCollectionClick = { id -> backStack.add(Route.CollectionDetail(id)) },
+                            onSharedPlaceClick = { id -> backStack.add(Route.PlaceDetail(id)) }
+                        )
+                    }
                 }
 
                 entry<Route.CreateCollection> {
@@ -183,12 +213,14 @@ fun AppNavigation(onSignOut: () -> Unit) {
                     )
                 }
                 entry<Route.Profile> {
-                    ProfileRoute(
-                        onSignOut = {
-                            addPlaceViewModel.clearDraft()
-                            onSignOut()
-                        }
-                    )
+                    AboveBottomBar(bottomBarPadding) {
+                        ProfileRoute(
+                            onSignOut = {
+                                addPlaceViewModel.clearDraft()
+                                onSignOut()
+                            }
+                        )
+                    }
                 }
 
                 entry<Route.AddPlace> {
@@ -260,6 +292,21 @@ fun AppNavigation(onSignOut: () -> Unit) {
     }
 }
 
+
+/**
+ * Keeps a tab's content above the floating bottom bar. The padding is also marked as consumed,
+ * so the screen's own Scaffold doesn't add the system navigation inset a second time.
+ */
+@Composable
+private fun AboveBottomBar(bottomBarPadding: Dp, content: @Composable () -> Unit) {
+    val padding = PaddingValues(bottom = bottomBarPadding)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .consumeWindowInsets(padding)
+    ) { content() }
+}
 
 private fun navigateToTab(
     backStack: androidx.navigation3.runtime.NavBackStack<NavKey>,
