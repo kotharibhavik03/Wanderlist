@@ -65,14 +65,13 @@ Kotlin Multiplatform + Compose Multiplatform travel app (Android + iOS from one 
 - Domain model: `Place`, `PlaceStatus`, `PlacePhoto`, `MemberRole`, `PlaceMember`, `MarkerStyle`, `SelectedLocation`.
 - Saving a place + collection page: `NewPlace`, `PlaceRepository`, `SavePlaceUseCase`, `InMemoryPlaceRepository`, `CollectionDetailViewModel`, `CollectionDetailRoute/Screen` (Places tab + All-photos grid), `Route.CollectionDetail`, manual-entry `MapPickerRoute`.
 - Collections → collection page: tapping a `CollectionCard` opens `Route.CollectionDetail`. Place counts are live: `PlaceCollection` has no stored count; counts come from `PlaceRepository.observePlaceCounts()`, joined by `ObserveCollectionSummariesUseCase` into `CollectionSummary` (used by Collections and the Add Place picker). Shared `util/pluralize`.
+- Create Collection accessibility: Back is an icon button; icon picker is a `selectableGroup` of radio buttons and colour picker is checkboxes (`toggleable`), each with a spoken label from `CollectionOptions` (`CollectionOption(value, label)`); emoji text hidden from screen readers; 48dp targets; tick tint picked by swatch luminance. `AppNavigation` no longer paints `Color.White` behind every screen.
 
 ### Compiles on both targets, runtime NOT yet confirmed
 - (nothing)
 
 ### Pending, in order
-1. **Finish Collections.**
-   - Create Collection: replace text glyphs (`←`, `✓`) with icons + `contentDescription`s; replace `Color.White` (also in `AppNavigation`); make icon and colour pickers accessible (selected state, labels).
-   - Add "Shared with me" as a segment on the Collections tab.
+1. **Finish Collections.** Add "Shared with me" as a segment on the Collections tab.
 2. **UI-4.** Place detail (photo pager, details, Directions, Edit, Leave place), full-screen photo viewer, Profile (avatar, name, email, sign out), Home map extras (marker bottom sheet, collection filter chips, my-location button, `HomeViewModel`).
 3. **Theme polish.** Typography, Shapes, semantic colours (Visited / Wishlist), status-bar style.
 4. **Functional phase** (only after the UI is done):
@@ -87,8 +86,7 @@ Kotlin Multiplatform + Compose Multiplatform travel app (Android + iOS from one 
 - Photo picker is a stub (`onAddPhotos` does nothing), so photo tiles and All-photos are empty.
 - All data is in-memory and lost on restart.
 - Add Place doesn't check whether an invited email is the user's own.
-- `AppNavigation` root `Scaffold` uses `.background(Color.White)` (breaks dark mode).
 - `HomeRoute`: hardcoded "0 Places", two actions both wired to `onFilterClick`, unused `onCollectionsClick` / `onProfileClick` / `innerPadding`.
 - `views/mapPicker/MapPickerRoute.kt` declares package `views.place` (folder/package mismatch).
-- File name typos: `SelectedLocaiton.kt`, `CollecitonOptions.kt`.
+- File name typo: `SelectedLocaiton.kt`.
 - Template leftovers to delete: `Greeting.kt`, `GreetingUtil.kt`, `Platform*.kt`, and the sample tests in `commonTest`, `iosTest`, `androidHostTest`.

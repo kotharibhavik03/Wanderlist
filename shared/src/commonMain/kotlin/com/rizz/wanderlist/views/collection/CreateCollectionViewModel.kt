@@ -16,8 +16,8 @@ import kotlinx.coroutines.launch
 
 data class CreateCollectionUiState(
     val name: String = "",
-    val icon: String = CollectionOptions.icons.first(),
-    val colors: List<Long> = listOf(CollectionOptions.colors.first()),
+    val icon: String = CollectionOptions.icons.first().value,
+    val colors: List<Long> = listOf(CollectionOptions.colors.first().value),
     val error: CollectionError? = null,
     val isSaving: Boolean = false
 ) {

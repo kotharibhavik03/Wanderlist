@@ -1,7 +1,6 @@
 
 package com.rizz.wanderlist.navigation
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,7 +19,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
@@ -141,9 +139,7 @@ fun AppNavigation(onSignOut: () -> Unit) {
                     )
                 }
             }
-        },
-        modifier = Modifier
-            .background(Color.White)
+        }
     ) { innerPadding ->
         NavDisplay(
             modifier = Modifier
