@@ -66,16 +66,16 @@ Kotlin Multiplatform + Compose Multiplatform travel app (Android + iOS from one 
 - Saving a place + collection page: `NewPlace`, `PlaceRepository`, `SavePlaceUseCase`, `InMemoryPlaceRepository`, `CollectionDetailViewModel`, `CollectionDetailRoute/Screen` (Places tab + All-photos grid), `Route.CollectionDetail`, manual-entry `MapPickerRoute`.
 - Collections → collection page: tapping a `CollectionCard` opens `Route.CollectionDetail`. Place counts are live: `PlaceCollection` has no stored count; counts come from `PlaceRepository.observePlaceCounts()`, joined by `ObserveCollectionSummariesUseCase` into `CollectionSummary` (used by Collections and the Add Place picker). Shared `util/pluralize`.
 - Create Collection accessibility: Back is an icon button; icon picker is a `selectableGroup` of radio buttons and colour picker is checkboxes (`toggleable`), each with a spoken label from `CollectionOptions` (`CollectionOption(value, label)`); emoji text hidden from screen readers; 48dp targets; tick tint picked by swatch luminance. `AppNavigation` no longer paints `Color.White` behind every screen.
+- "Shared with me": segmented control (My collections | Shared with me) on the Collections tab; FAB only on My collections. `PlaceRepository.observeSharedWithMe()` returns `SharedPlace(place, myRole)` for places someone else owns where my lowercase email is a member. `InMemoryPlaceRepository` now takes `AuthRepository` and stamps the real signed-in user as `ownerId` / photo `uploaderId`.
 
 ### Compiles on both targets, runtime NOT yet confirmed
 - (nothing)
 
 ### Pending, in order
-1. **Finish Collections.** Add "Shared with me" as a segment on the Collections tab.
-2. **UI-4.** Place detail (photo pager, details, Directions, Edit, Leave place), full-screen photo viewer, Profile (avatar, name, email, sign out), Home map extras (marker bottom sheet, collection filter chips, my-location button, `HomeViewModel`).
-3. **Theme polish.** Typography, Shapes, semantic colours (Visited / Wishlist), status-bar style.
-4. **Functional phase** (only after the UI is done):
-   - Firestore: **verify the GitLive `firebase-firestore` version matches KMPAuth's GitLive 3.0.0-alpha01**; link FirebaseFirestore via SPM on iOS; security rules; `FirestoreCollectionRepository` and `FirestorePlaceRepository`. Denormalise member-ids / member-emails arrays on the place for rules and queries.
+1. **UI-4.** Place detail (make `SharedPlaceCard` and collection-page `PlaceCard` open it) (photo pager, details, Directions, Edit, Leave place), full-screen photo viewer, Profile (avatar, name, email, sign out), Home map extras (marker bottom sheet, collection filter chips, my-location button, `HomeViewModel`).
+2. **Theme polish.** Typography, Shapes, semantic colours (Visited / Wishlist), status-bar style.
+3. **Functional phase** (only after the UI is done):
+   - Firestore: **verify the GitLive `firebase-firestore` version matches KMPAuth's GitLive 3.0.0-alpha01**; link FirebaseFirestore via SPM on iOS; security rules; `FirestoreCollectionRepository` and `FirestorePlaceRepository`. Denormalise member-ids / member-emails arrays on the place for rules and queries, and the owner's name/email so "Shared with me" can show who shared it.
    - Google Maps: expect/actual wrapper (Maps Compose on Android, native SDK on iOS), custom markers, real Map Picker with pin-drop and free geocoders. API key stays out of Git.
    - Photos: picker (expect/actual), compression, Coil 3, Firebase Storage behind `PhotoStorage`. Replace local-uri photo ids with real ids and map `MarkerStyle.Photo` on upload.
    - Collaboration: `users` collection with email lookup, invites for unregistered emails resolved on first sign-in, leave-place, visibility rules.
@@ -84,7 +84,7 @@ Kotlin Multiplatform + Compose Multiplatform travel app (Android + iOS from one 
 ### Known gaps and cleanup to fold into upcoming steps
 - Save on Add Place only works via the manual location form; the real map comes later.
 - Photo picker is a stub (`onAddPhotos` does nothing), so photo tiles and All-photos are empty.
-- All data is in-memory and lost on restart.
+- All data is in-memory and lost on restart. Collections are not scoped per user, so switching accounts shows the previous account's collections until Firestore.
 - Add Place doesn't check whether an invited email is the user's own.
 - `HomeRoute`: hardcoded "0 Places", two actions both wired to `onFilterClick`, unused `onCollectionsClick` / `onProfileClick` / `innerPadding`.
 - `views/mapPicker/MapPickerRoute.kt` declares package `views.place` (folder/package mismatch).

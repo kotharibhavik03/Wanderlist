@@ -22,7 +22,7 @@ val appModule = module {
     single<CollectionRepository> { InMemoryCollectionRepository() }
     factory { CreateCollectionUseCase(get()) }
     factory { ObserveCollectionSummariesUseCase(get(), get()) }
-    viewModel { CollectionsViewModel(get()) }
+    viewModel { CollectionsViewModel(get(), get()) }
     viewModel { CreateCollectionViewModel(get()) }
 
     single<AuthRepository> { KmpAuthRepository() }
@@ -31,7 +31,7 @@ val appModule = module {
 
     viewModel { AddPlaceViewModel(get(), get()) }
 
-    single<PlaceRepository> { InMemoryPlaceRepository() }
+    single<PlaceRepository> { InMemoryPlaceRepository(get()) }
     factory { SavePlaceUseCase(get()) }
     viewModel { (collectionId: String) -> CollectionDetailViewModel(collectionId, get(), get()) }
 
