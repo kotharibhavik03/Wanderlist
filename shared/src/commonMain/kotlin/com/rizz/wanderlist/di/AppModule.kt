@@ -33,7 +33,7 @@ val appModule = module {
     factory { CreateCollectionUseCase(get()) }
     factory { DeleteCollectionUseCase(get(), get()) }
     factory { ObserveCollectionSummariesUseCase(get(), get()) }
-    viewModel { CollectionsViewModel(get(), get()) }
+    viewModel { CollectionsViewModel(get(), get(), get()) }
     viewModel { CreateCollectionViewModel(get()) }
 
     single<AuthRepository> { KmpAuthRepository() }

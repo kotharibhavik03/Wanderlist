@@ -39,7 +39,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rizz.wanderlist.domain.model.CollectionSummary
 import com.rizz.wanderlist.domain.model.PlaceCollection
-import com.rizz.wanderlist.domain.model.SharedPlace
 import com.rizz.wanderlist.util.formatCoordinates
 import com.rizz.wanderlist.util.pluralize
 import com.rizz.wanderlist.views.place.MarkerBadge
@@ -159,7 +158,7 @@ private fun MyCollections(
 
 @Composable
 private fun SharedWithMe(
-    sharedPlaces: List<SharedPlace>,
+    sharedPlaces: List<SharedPlaceItem>,
     onPlaceClick: (placeId: String) -> Unit
 ) {
     if (sharedPlaces.isEmpty()) {
@@ -172,16 +171,17 @@ private fun SharedWithMe(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(sharedPlaces, key = { it.place.id }) { shared ->
-            SharedPlaceCard(shared, onClick = { onPlaceClick(shared.place.id) })
+        items(sharedPlaces, key = { it.shared.place.id }) { item ->
+            SharedPlaceCard(item, onClick = { onPlaceClick(item.shared.place.id) })
         }
     }
 }
 
 /** A place shared with me. Its collection is private to the owner, so the marker falls back to a pin. */
 @Composable
-private fun SharedPlaceCard(shared: SharedPlace, onClick: () -> Unit) {
-    val place = shared.place
+private fun SharedPlaceCard(item: SharedPlaceItem, onClick: () -> Unit) {
+    val place = item.shared.place
+    val role = item.shared.myRole.title()
     OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -204,9 +204,11 @@ private fun SharedPlaceCard(shared: SharedPlace, onClick: () -> Unit) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    "You: ${shared.myRole.title()}",
+                    item.sharedBy?.let { "Shared by $it · $role" } ?: "Shared with you · $role",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
