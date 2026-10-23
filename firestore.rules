@@ -80,12 +80,40 @@ service cloud.firestore {
           == request.auth.uid;
       }
 
+      // The photo index: photo id -> uploader id (PlaceDocument.photoUploaders). Places saved
+      // before it existed have none.
+      function photoIndex(data) {
+        return data.get('photoUploaders', {});
+      }
+
+      // The index keeps only entries it already had, unchanged: entries can be removed, not added.
+      function photoIndexOnlyShrinks() {
+        let diff = photoIndex(request.resource.data).diff(photoIndex(resource.data));
+        return diff.addedKeys().size() == 0 && diff.changedKeys().size() == 0;
+      }
+
+      // Exactly the caller's photos left the index: none of theirs remain, everyone else's do.
+      function removesExactlyMyPhotos() {
+        return photoIndexOnlyShrinks()
+          && !(request.auth.uid in photoIndex(request.resource.data).values())
+          && photoIndex(request.resource.data).size()
+               == photoIndex(resource.data).values().removeAll([request.auth.uid]).size();
+      }
+
+      // The marker is unchanged, or it showed one of the caller's photos and is now the collection's.
+      function keepsMarkerOrDropsMyPhoto() {
+        return request.resource.data.marker == resource.data.marker
+          || (resource.data.marker.type == 'PHOTO'
+              && photoIndex(resource.data).get(resource.data.marker.photoId, '') == request.auth.uid
+              && request.resource.data.marker.type == 'COLLECTION');
+      }
+
       // Field names and limits mirror PlaceDocument and validatePlaceDetails.
       function isValidPlace(data) {
         return data.keys().hasOnly([
             'ownerId', 'ownerName', 'ownerEmail', 'collectionId', 'actualName', 'customName', 'address',
             'latitude', 'longitude', 'status', 'visitedOn', 'rating', 'notes', 'marker',
-            'members', 'memberEmails', 'collaboratorEmails', 'createdAt', 'updatedAt'
+            'members', 'memberEmails', 'collaboratorEmails', 'photoUploaders', 'createdAt', 'updatedAt'
           ])
           && data.ownerId is string
           && (data.get('ownerName', null) == null
@@ -116,6 +144,7 @@ service cloud.firestore {
           && data.memberEmails is list && data.memberEmails.size() == data.members.size()
           && data.collaboratorEmails is list
           && data.collaboratorEmails.size() <= data.memberEmails.size()
+          && (data.get('photoUploaders', null) == null || data.photoUploaders is map)
           && data.createdAt is int && data.updatedAt is int;
       }
 
@@ -136,6 +165,8 @@ service cloud.firestore {
         && (request.resource.data.get('ownerEmail', null) == null
             || request.resource.data.ownerEmail == myEmail())
         && isValidPlace(request.resource.data)
+        // A new place's photos are all the owner's.
+        && photoIndex(request.resource.data).values().hasOnly([request.auth.uid])
         && ownsCollection(request.resource.data.collectionId);
 
       allow update: if signedIn()
@@ -146,17 +177,22 @@ service cloud.firestore {
         && request.resource.data.createdAt == resource.data.createdAt
         && (
           // Owner: anything; a different collection must also be theirs, and they can't be a member.
+          // Photos only leave the index (with a removed member), never join it here.
           (resource.data.ownerId == request.auth.uid
             && !(myEmail() in request.resource.data.memberEmails)
+            && photoIndexOnlyShrinks()
             && (request.resource.data.collectionId == resource.data.collectionId
                 || ownsCollection(request.resource.data.collectionId)))
           // Collaborator: the place's own details only.
           || (myEmail() in resource.data.collaboratorEmails
             && changedOnly(['actualName', 'customName', 'address', 'latitude', 'longitude',
                             'status', 'visitedOn', 'rating', 'notes', 'marker', 'updatedAt']))
-          // Any member: leave, removing exactly themselves.
+          // Any member: leave, removing exactly themselves and their own photos.
           || (myEmail() in resource.data.memberEmails
-            && changedOnly(['members', 'memberEmails', 'collaboratorEmails', 'updatedAt'])
+            && changedOnly(['members', 'memberEmails', 'collaboratorEmails', 'photoUploaders',
+                            'marker', 'updatedAt'])
+            && removesExactlyMyPhotos()
+            && keepsMarkerOrDropsMyPhoto()
             && request.resource.data.memberEmails == resource.data.memberEmails.removeAll([myEmail()])
             && request.resource.data.collaboratorEmails
                  == resource.data.collaboratorEmails.removeAll([myEmail()])
@@ -193,17 +229,25 @@ service cloud.firestore {
           && canSeePlace(get(placePath()).data)
           && (resource.data.isPrivate == false || resource.data.uploaderId == request.auth.uid);
 
-        // Anyone on the place adds their own photos. getAfter, so a new place and its photos
-        // can be written in one batch. Each photo costs one document lookup and a batch may
-        // make at most 20, so one save carries at most 10 photos (MAX_PHOTOS_PER_SAVE).
+        // Anyone on the place can add their own photos, listed under their uid in the place's
+        // photo index. That's how the owner finds every photo later.
+        function canAddPhoto(place) {
+          return canSeePlace(place) && photoIndex(place).get(photoId, null) == request.auth.uid;
+        }
+
+        // getAfter, so a new place and its photos can be written in one batch. Each photo costs
+        // one document lookup and a batch may make at most 20, so one save carries at most
+        // 10 photos (MAX_PHOTOS_PER_SAVE).
         allow create: if signedIn()
           && request.resource.data.uploaderId == request.auth.uid
           && isValidPhoto(request.resource.data)
-          && canSeePlace(getAfter(placePath()).data);
+          && canAddPhoto(getAfter(placePath()).data);
 
         // The uploader removes their own photo; the owner can remove any photo on their place.
+        // Deleting one that's already gone is allowed, so an interrupted cleanup can be retried.
         allow delete: if signedIn()
-          && (resource.data.uploaderId == request.auth.uid
+          && (resource == null
+              || resource.data.uploaderId == request.auth.uid
               || get(placePath()).data.ownerId == request.auth.uid);
       }
     }

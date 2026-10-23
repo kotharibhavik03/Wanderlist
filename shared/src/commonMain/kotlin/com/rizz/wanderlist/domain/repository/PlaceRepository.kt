@@ -51,7 +51,8 @@ interface PlaceRepository {
 
     /**
      * Applies [details] to a place. The owner may change everything; a collaborator may not
-     * move it to another collection or change its people. Throws when not allowed.
+     * move it to another collection or change its people. People the owner removes lose the
+     * photos they added. Throws when not allowed.
      */
     suspend fun updatePlace(placeId: String, details: PlaceDetails): Place
 

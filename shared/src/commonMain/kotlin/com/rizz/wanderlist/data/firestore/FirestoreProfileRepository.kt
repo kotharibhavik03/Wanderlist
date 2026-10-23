@@ -58,10 +58,22 @@ class FirestoreProfileRepository(private val firestore: FirebaseFirestore) : Pro
         return combine(perEmail) { found -> found.filterNotNull().associateBy { it.email } }
     }
 
-    /** A Firestore document id can't contain "/". Real email addresses don't. */
-    private fun String.isUsableId() = isNotBlank() && '/' !in this
-
     private companion object {
-        const val PROFILES = "profiles"
+        const val PROFILES = PROFILES_COLLECTION
     }
 }
+
+internal const val PROFILES_COLLECTION = "profiles"
+
+/**
+ * The user id of whoever signed in with [email], or null if nobody has yet. Trustworthy: only
+ * that account can write its profile, and the rules require the profile's uid to be its own.
+ */
+internal suspend fun FirebaseFirestore.uidForEmail(email: String): String? {
+    val id = email.lowercase().takeIf { it.isUsableId() } ?: return null
+    val snapshot = collection(PROFILES_COLLECTION).document(id).get()
+    return if (snapshot.exists) snapshot.data<ProfileDocument>().uid.ifBlank { null } else null
+}
+
+/** A Firestore document id can't contain "/". Real email addresses don't. */
+private fun String.isUsableId() = isNotBlank() && '/' !in this

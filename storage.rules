@@ -14,6 +14,14 @@ service firebase.storage {
         return request.auth != null && request.auth.uid == uploaderId;
       }
 
+      // The place's owner, looked up in Firestore. Deleting a place (or removing a member)
+      // deletes other people's photos too, and the place is deleted only after its files.
+      function ownsPlace() {
+        return request.auth != null
+          && firestore.get(/databases/(default)/documents/places/$(placeId)).data.ownerId
+               == request.auth.uid;
+      }
+
       // Through the SDK, only the uploader (it fetches the download URL right after uploading).
       // Everyone else loads a photo from its download URL, which they can only find in a
       // Firestore photo document they're allowed to read.
@@ -25,7 +33,8 @@ service firebase.storage {
         && request.resource.contentType == 'image/jpeg'
         && request.resource.size < 5 * 1024 * 1024;
 
-      allow delete: if isUploader();
+      // Uploaders delete their own files (and so when leaving a place); owners any file on their place.
+      allow delete: if isUploader() || ownsPlace();
     }
   }
 }

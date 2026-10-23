@@ -14,7 +14,8 @@ import kotlinx.serialization.Serializable
  * leniently, so an unknown value from a newer app version doesn't break decoding.
  *
  * Photos are not stored here: rules can't hide part of a document, so each photo is its own
- * document in the `photos` subcollection (see PhotoDocument).
+ * document in the `photos` subcollection (see PhotoDocument). The place only keeps an index of
+ * them, [photoUploaders].
  */
 @Serializable
 internal data class PlaceDocument(
@@ -38,6 +39,12 @@ internal data class PlaceDocument(
     val memberEmails: List<String> = emptyList(),
     /** Collaborators' emails. Rules can't search inside [members], so edit access is checked here. */
     val collaboratorEmails: List<String> = emptyList(),
+    /**
+     * Every photo on the place: photo id to uploader id. The owner can't read other people's
+     * private photos, so this is how they find every photo (and its file) when the place is
+     * deleted or a member removed. firestore.rules only accepts a photo that is listed here.
+     */
+    val photoUploaders: Map<String, String> = emptyMap(),
     /** Client clock, epoch millis. */
     val createdAt: Long = 0,
     val updatedAt: Long = 0
@@ -125,8 +132,12 @@ internal val COLLABORATOR_EDIT_FIELDS = arrayOf(
     "status", "visitedOn", "rating", "notes", "marker", "updatedAt"
 )
 
-/** The only fields leaving a place writes. Must match the leave branch of the places update rule. */
-internal val MEMBERSHIP_FIELDS = arrayOf("members", "memberEmails", "collaboratorEmails", "updatedAt")
+/**
+ * The only fields leaving a place writes: the membership, plus the photo index, as the leaving
+ * member's photos go with them ("marker" too when it showed one of them). Must match the leave
+ * branch of the places update rule.
+ */
+internal val MEMBERSHIP_FIELDS = arrayOf("members", "memberEmails", "collaboratorEmails", "photoUploaders", "updatedAt")
 
 /** Who owns a place, as stored on it. */
 internal data class PlaceOwner(val id: String, val name: String?, val email: String?)
@@ -139,6 +150,15 @@ internal fun PlaceDocument.withoutMember(email: String, updatedAt: Long) = copy(
     memberEmails = memberEmails.filterNot { it == email },
     collaboratorEmails = collaboratorEmails.filterNot { it == email },
     updatedAt = updatedAt
+)
+
+/**
+ * The same place without some photos: they leave the index, and a marker showing one of them
+ * falls back to the collection's.
+ */
+internal fun PlaceDocument.withoutPhotos(photoIds: Set<String>) = copy(
+    photoUploaders = photoUploaders - photoIds,
+    marker = if (marker.type == MarkerDocument.TYPE_PHOTO && marker.photoId in photoIds) MarkerDocument() else marker
 )
 
 private fun MarkerDocument.toDomain(): MarkerStyle = when (type) {

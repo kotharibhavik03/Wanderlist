@@ -13,6 +13,7 @@ import com.rizz.wanderlist.domain.model.accessFor
 import com.rizz.wanderlist.domain.repository.AuthRepository
 import com.rizz.wanderlist.domain.repository.PhotoStorage
 import com.rizz.wanderlist.domain.repository.PlaceRepository
+import com.rizz.wanderlist.util.resultOf
 import dev.gitlive.firebase.firestore.FirebaseFirestore
 import dev.gitlive.firebase.firestore.QuerySnapshot
 import kotlin.time.Clock
@@ -109,7 +110,7 @@ class FirestorePlaceRepository(
                 owner = PlaceOwner(id = owner.id, name = owner.displayName, email = owner.email?.lowercase()),
                 createdAt = now,
                 updatedAt = now
-            )
+            ).copy(photoUploaders = photos.associate { (photoId, photo) -> photoId to photo.uploaderId })
             val batch = firestore.batch()
                 .set(reference, PlaceDocument.serializer(), document) { encodeDefaults = true }
             photos.forEach { (photoId, photo) ->
@@ -133,6 +134,11 @@ class FirestorePlaceRepository(
     override suspend fun updatePlace(placeId: String, details: PlaceDetails): Place {
         val user = requireSignedInUser()
         val reference = places.document(placeId)
+        // People the owner removes take their photos with them. The photos go first: if the
+        // save then fails, retrying it finishes the job, and no removed member's photos are
+        // left behind out of the index's reach.
+        val removedPhotos = photosOfRemovedMembers(placeId, details, user)
+        deletePhotos(placeId, removedPhotos)
         // A transaction, so an edit can't silently overwrite a change made in the meantime.
         return firestore.runTransaction {
             val snapshot = get(reference)
@@ -142,7 +148,7 @@ class FirestorePlaceRepository(
 
             val access = currentPlace.accessFor(user)
             val allowed = when (access) {
-                PlaceAccess.OWNER -> details.also { requireNotAMember(user, it) }
+                PlaceAccess.OWNER -> details.also { requireNotAMember(user, it) }.withoutMarkerPhoto(removedPhotos.keys)
                 // A collaborator can't move the place or change its people; keep the current ones.
                 PlaceAccess.COLLABORATOR -> details.copy(
                     collectionId = currentPlace.collectionId,
@@ -164,6 +170,7 @@ class FirestorePlaceRepository(
             }
 
             val updated = checked.toDocument(owner = current.owner, createdAt = current.createdAt, updatedAt = now())
+                .copy(photoUploaders = current.photoUploaders - removedPhotos.keys)
             if (access == PlaceAccess.OWNER) {
                 set(reference, PlaceDocument.serializer(), updated) { encodeDefaults = true }
             } else {
@@ -180,7 +187,7 @@ class FirestorePlaceRepository(
         val user = requireSignedInUser()
         val myEmail = user.email?.lowercase() ?: error("Your account has no email address.")
         val reference = places.document(placeId)
-        firestore.runTransaction {
+        val myPhotos = firestore.runTransaction {
             val snapshot = get(reference)
             check(snapshot.exists) { "This place no longer exists." }
             val current = snapshot.data(PlaceDocument.serializer())
@@ -189,21 +196,29 @@ class FirestorePlaceRepository(
                 PlaceAccess.OWNER -> error("You own this place, so you can't leave it.")
                 null -> error("You're not a member of this place.")
             }
-            // Only the membership fields: the rules let a leaving member change nothing else.
-            // Removing the member's photos joins this once photos have their subcollection.
-            set(reference, PlaceDocument.serializer(), current.withoutMember(myEmail, now()), *MEMBERSHIP_FIELDS) {
-                encodeDefaults = true
-            }
+            // My photos leave with me, in the same transaction: the place, its index and the
+            // photo documents change together or not at all.
+            val myPhotos = current.photoUploaders.filterValues { it == user.id }
+            val updated = current.withoutMember(myEmail, now()).withoutPhotos(myPhotos.keys)
+            // Only the membership fields and the photo index: the rules let a leaving member
+            // change nothing else. The marker only when it showed one of my photos; rewriting an
+            // unchanged one could still differ from what's stored (an older place may lack a key).
+            val fields = if (updated.marker == current.marker) MEMBERSHIP_FIELDS else MEMBERSHIP_FIELDS + "marker"
+            set(reference, PlaceDocument.serializer(), updated, *fields) { encodeDefaults = true }
+            myPhotos.keys.forEach { photoId -> delete(reference.collection(PHOTOS).document(photoId)) }
+            myPhotos
         }
+        // The files are in my own Storage folder, so I can delete them after leaving.
+        deletePhotoFiles(placeId, myPhotos)
     }
 
     override suspend fun deletePlace(placeId: String) {
         val user = requireSignedInUser()
-        val reference = places.document(placeId)
-        val snapshot = reference.get()
+        val snapshot = places.document(placeId).get()
         check(snapshot.exists) { "This place no longer exists." }
-        check(snapshot.data<PlaceDocument>().ownerId == user.id) { "Only the owner can delete this place." }
-        reference.delete()
+        val document = snapshot.data<PlaceDocument>()
+        check(document.ownerId == user.id) { "Only the owner can delete this place." }
+        deleteWithPhotos(placeId, document, user)
     }
 
     override suspend fun deletePlacesInCollection(collectionId: String) {
@@ -211,9 +226,74 @@ class FirestorePlaceRepository(
         val snapshot = places
             .where { ("ownerId" equalTo user.id) and ("collectionId" equalTo collectionId) }
             .get()
-        // A batch commits all of its deletes or none; Firestore allows 500 writes per batch.
-        snapshot.documents.chunked(MAX_BATCH_WRITES).forEach { chunk ->
-            chunk.fold(firestore.batch()) { batch, document -> batch.delete(document.reference) }.commit()
+        // One place at a time, each with its photos. If one fails, the ones before it are gone
+        // and deleting the collection again picks up the rest.
+        snapshot.documents.forEach { document ->
+            deleteWithPhotos(document.id, document.data<PlaceDocument>(), user)
+        }
+    }
+
+    /**
+     * Deletes a place the [owner] owns, with every photo on it: photo documents, then files,
+     * then the place. The place goes last because the rules look up its owner while the photos
+     * are deleted (the photos' delete rule, and storage.rules for other people's files).
+     */
+    private suspend fun deleteWithPhotos(placeId: String, document: PlaceDocument, owner: User) {
+        deletePhotos(placeId, document.photoUploaders + unindexedPhotos(placeId, owner))
+        places.document(placeId).delete()
+    }
+
+    /**
+     * The owner's photos on a place saved before the photo index existed. Back then only the
+     * owner could add photos, so their own photos are all there are; they can always read them.
+     */
+    private suspend fun unindexedPhotos(placeId: String, owner: User): Map<String, String> =
+        places.document(placeId).collection(PHOTOS)
+            .where { "uploaderId" equalTo owner.id }
+            .get()
+            .documents
+            .associate { it.id to owner.id }
+
+    /**
+     * Photos (id to uploader) of the members the owner's edit removes. Empty unless [user] owns
+     * the place. Uploaders are found through the removed members' profiles; someone who never
+     * signed in has no profile, and no photos either.
+     */
+    private suspend fun photosOfRemovedMembers(placeId: String, details: PlaceDetails, user: User): Map<String, String> {
+        val snapshot = places.document(placeId).get()
+        if (!snapshot.exists) return emptyMap()
+        val current = snapshot.data<PlaceDocument>()
+        if (current.ownerId != user.id) return emptyMap()
+        val kept = details.members.map { it.email.lowercase() }.toSet()
+        val removedUids = current.memberEmails
+            .filterNot { it in kept }
+            .mapNotNull { email -> firestore.uidForEmail(email) }
+            .toSet()
+        if (removedUids.isEmpty()) return emptyMap()
+        return current.photoUploaders.filterValues { it in removedUids }
+    }
+
+    /**
+     * Deletes photos (id to uploader) from a place that still exists: their documents first, so
+     * nobody sees them any more, then their files. Batches stay small because the delete rule may
+     * look up the place once per photo, and a batch may make at most 20 lookups.
+     */
+    private suspend fun deletePhotos(placeId: String, photos: Map<String, String>) {
+        if (photos.isEmpty()) return
+        val photoDocuments = places.document(placeId).collection(PHOTOS)
+        photos.keys.chunked(MAX_RULE_LOOKUPS_PER_BATCH).forEach { ids ->
+            ids.fold(firestore.batch()) { batch, id -> batch.delete(photoDocuments.document(id)) }.commit()
+        }
+        deletePhotoFiles(placeId, photos)
+    }
+
+    /**
+     * Deletes photo files (id to uploader). Best effort: a file that is already gone, or can't be
+     * deleted right now, is left behind; its document is already deleted, so nobody can find it.
+     */
+    private suspend fun deletePhotoFiles(placeId: String, photos: Map<String, String>) {
+        photos.forEach { (photoId, uploaderId) ->
+            resultOf { photoStorage.delete(photoStoragePath(placeId, uploaderId, photoId)) }
         }
     }
 
@@ -287,6 +367,12 @@ class FirestorePlaceRepository(
         return copy(markerStyle = if (url != null) marker.copy(url = url) else MarkerStyle.CollectionDefault)
     }
 
+    /** A photo marker showing one of [photoIds] (photos being deleted) becomes the collection default. */
+    private fun PlaceDetails.withoutMarkerPhoto(photoIds: Set<String>): PlaceDetails {
+        val marker = markerStyle as? MarkerStyle.Photo ?: return this
+        return if (marker.photoId in photoIds) copy(markerStyle = MarkerStyle.CollectionDefault) else this
+    }
+
     /** The owner already has the place; firestore.rules refuses them as a member too. */
     private fun requireNotAMember(owner: User, details: PlaceDetails) {
         val email = owner.email?.lowercase() ?: return
@@ -303,6 +389,7 @@ class FirestorePlaceRepository(
     private companion object {
         const val PLACES = "places"
         const val PHOTOS = "photos"
-        const val MAX_BATCH_WRITES = 500
+        /** firestore.rules allows a batch at most 20 document lookups; deleting someone else's photo costs one. */
+        const val MAX_RULE_LOOKUPS_PER_BATCH = 20
     }
 }
