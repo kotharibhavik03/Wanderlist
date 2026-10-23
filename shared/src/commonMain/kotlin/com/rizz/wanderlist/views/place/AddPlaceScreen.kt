@@ -27,7 +27,6 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.LocationOn
@@ -67,12 +66,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import com.rizz.wanderlist.domain.model.CollectionSummary
+import com.rizz.wanderlist.domain.model.MAX_PHOTOS_PER_SAVE
 import com.rizz.wanderlist.domain.model.MarkerStyle
 import com.rizz.wanderlist.domain.model.MemberRole
 import com.rizz.wanderlist.domain.model.PlaceCollection
@@ -166,10 +168,11 @@ fun AddPlaceScreen(
             ) {
                 LocationSection(uiState.selectedLocation, actions.onOpenMapPicker)
                 DetailsSection(uiState, actions, onPickDate = { showDatePicker = true })
-                // Adding photos to an existing place comes with the photo upload step.
+                // Adding photos to an existing place comes in a later step.
                 if (uiState.mode == DraftMode.New) {
                     PhotosSection(
                         photos = uiState.photos,
+                        canAdd = uiState.photoRoom > 0 && !uiState.isSaving,
                         onAdd = actions.onAddPhotos,
                         onRemove = actions.onPhotoRemoved,
                         onTogglePrivate = actions.onPhotoPrivacyToggled
@@ -357,11 +360,15 @@ private fun RatingRow(rating: Int?, onChange: (Int?) -> Unit) {
 @Composable
 private fun PhotosSection(
     photos: List<DraftPhoto>,
+    canAdd: Boolean,
     onAdd: () -> Unit,
     onRemove: (String) -> Unit,
     onTogglePrivate: (String) -> Unit
 ) {
-    Section("Photos", "Optional. Lock a photo to keep it visible only to you.") {
+    Section(
+        "Photos",
+        "Optional, up to $MAX_PHOTOS_PER_SAVE. Lock a photo to keep it visible only to you."
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -369,18 +376,20 @@ private fun PhotosSection(
             photos.forEach { photo ->
                 PhotoThumbnail(
                     photo = photo,
-                    onRemove = { onRemove(photo.uri) },
-                    onTogglePrivate = { onTogglePrivate(photo.uri) }
+                    onRemove = { onRemove(photo.id) },
+                    onTogglePrivate = { onTogglePrivate(photo.id) }
                 )
             }
-            OutlinedCard(onClick = onAdd, modifier = Modifier.size(88.dp)) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null)
-                    Text("Add", style = MaterialTheme.typography.labelMedium)
+            if (canAdd) {
+                OutlinedCard(onClick = onAdd, modifier = Modifier.size(88.dp)) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(Icons.Default.AddPhotoAlternate, contentDescription = null)
+                        Text("Add", style = MaterialTheme.typography.labelMedium)
+                    }
                 }
             }
         }
@@ -396,22 +405,29 @@ private fun PhotoThumbnail(photo: DraftPhoto, onRemove: () -> Unit, onTogglePriv
                 .clip(MaterialTheme.shapes.small)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            // Real image loading (Coil) arrives with the photo step.
-            Icon(
-                Icons.Default.Image,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.align(Alignment.Center).size(32.dp)
-            )
-            IconButton(
+            if (photo.localPath == null) {
+                // Still being compressed.
+                CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.Center).size(24.dp),
+                    strokeWidth = 2.dp
+                )
+            } else {
+                AsyncImage(
+                    model = photo.localPath,
+                    contentDescription = if (photo.isPrivate) "Private photo" else "Shared photo",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            ThumbnailButton(
                 onClick = onRemove,
-                modifier = Modifier.align(Alignment.TopEnd).size(36.dp)
+                modifier = Modifier.align(Alignment.TopEnd)
             ) {
                 Icon(Icons.Default.Close, contentDescription = "Remove photo", modifier = Modifier.size(18.dp))
             }
-            IconButton(
+            ThumbnailButton(
                 onClick = onTogglePrivate,
-                modifier = Modifier.align(Alignment.BottomStart).size(36.dp)
+                modifier = Modifier.align(Alignment.BottomStart)
             ) {
                 Icon(
                     imageVector = if (photo.isPrivate) Icons.Default.Lock else Icons.Default.LockOpen,
@@ -426,6 +442,20 @@ private fun PhotoThumbnail(photo: DraftPhoto, onRemove: () -> Unit, onTogglePriv
             text = if (photo.isPrivate) "Only me" else "Shared",
             style = MaterialTheme.typography.labelSmall
         )
+    }
+}
+
+/** A 36dp icon button on a small translucent disc, so it stays visible over any photo. */
+@Composable
+private fun ThumbnailButton(onClick: () -> Unit, modifier: Modifier, icon: @Composable () -> Unit) {
+    IconButton(onClick = onClick, modifier = modifier.size(36.dp)) {
+        Box(
+            modifier = Modifier
+                .size(26.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)),
+            contentAlignment = Alignment.Center
+        ) { icon() }
     }
 }
 
@@ -455,19 +485,21 @@ private fun MarkerSection(
                 ) { MarkerBadge(emoji, brush) }
             }
 
-            uiState.photos.filterNot { it.isPrivate }.forEach { photo ->
+            uiState.photos.filter { it.isReady && !it.isPrivate }.forEach { photo ->
                 MarkerOption(
                     label = "Photo marker",
-                    selected = uiState.markerStyle == MarkerStyle.Photo(photo.uri),
-                    onClick = { onChange(MarkerStyle.Photo(photo.uri)) }
+                    selected = uiState.markerStyle == MarkerStyle.Photo(photo.id),
+                    onClick = { onChange(MarkerStyle.Photo(photo.id)) }
                 ) {
-                    Box(
+                    AsyncImage(
+                        model = photo.localPath,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .size(44.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) { Icon(Icons.Default.Image, contentDescription = null) }
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    )
                 }
             }
         }
@@ -596,9 +628,12 @@ private fun PeopleSection(
 
 @Composable
 private fun SaveSection(uiState: AddPlaceUiState, onSave: () -> Unit) {
+    val upload = uiState.photoUpload
     val hint = when {
         uiState.selectedLocation == null -> "Choose a location to continue."
         uiState.selectedCollectionId == null -> "Choose a collection to continue."
+        uiState.isPreparingPhotos -> "Getting your photos ready…"
+        upload != null -> "Uploading photos: ${upload.uploaded} of ${upload.total}"
         else -> null
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

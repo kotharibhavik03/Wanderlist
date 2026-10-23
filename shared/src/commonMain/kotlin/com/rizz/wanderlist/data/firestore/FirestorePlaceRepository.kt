@@ -10,11 +10,13 @@ import com.rizz.wanderlist.domain.model.SharedPlace
 import com.rizz.wanderlist.domain.model.User
 import com.rizz.wanderlist.domain.model.accessFor
 import com.rizz.wanderlist.domain.repository.AuthRepository
+import com.rizz.wanderlist.domain.repository.PhotoStorage
 import com.rizz.wanderlist.domain.repository.PlaceRepository
 import dev.gitlive.firebase.firestore.FirebaseFirestore
 import dev.gitlive.firebase.firestore.QuerySnapshot
 import kotlin.time.Clock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 /**
  * Places in Firestore at `places/{id}`. Every query is scoped to the signed-in user: places
@@ -31,7 +34,8 @@ import kotlinx.coroutines.flow.map
  */
 class FirestorePlaceRepository(
     private val firestore: FirebaseFirestore,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val photoStorage: PhotoStorage
 ) : PlaceRepository {
 
     private val places get() = firestore.collection(PLACES)
@@ -72,18 +76,46 @@ class FirestorePlaceRepository(
         }
     }
 
-    override suspend fun createPlace(newPlace: NewPlace): Place {
+    override suspend fun createPlace(newPlace: NewPlace, onPhotoUploaded: (uploaded: Int) -> Unit): Place {
         val owner = requireSignedInUser()
         val now = now()
-        val reference = places.document // new auto-id, known before the write
-        // Photos are stored in their own subcollection, added with the photo step.
+        val reference = places.document // new auto-id, known before anything is written
         val document = newPlace.details.toDocument(
             owner = PlaceOwner(id = owner.id, name = owner.displayName, email = owner.email?.lowercase()),
             createdAt = now,
             updatedAt = now
         )
-        reference.set(document) { encodeDefaults = true }
-        return document.toDomain(reference.id)
+
+        val uploadedPaths = mutableListOf<String>()
+        try {
+            // 1. The files first, one at a time so progress is simple and memory stays low.
+            val photos = newPlace.photos.mapIndexed { index, photo ->
+                val path = photoStoragePath(reference.id, owner.id, photo.id)
+                val url = photoStorage.upload(path, photo.localPath)
+                uploadedPaths += path
+                onPhotoUploaded(index + 1)
+                photo.id to PhotoDocument(uploaderId = owner.id, url = url, isPrivate = photo.isPrivate, createdAt = now)
+            }
+
+            // 2. The place and its photo documents in one batch: they appear together or not at all.
+            val batch = firestore.batch()
+                .set(reference, PlaceDocument.serializer(), document) { encodeDefaults = true }
+            photos.forEach { (photoId, photo) ->
+                batch.set(reference.collection(PHOTOS).document(photoId), PhotoDocument.serializer(), photo) {
+                    encodeDefaults = true
+                }
+            }
+            batch.commit()
+
+            return document.toDomain(reference.id).copy(photos = photos.map { (id, photo) -> photo.toDomain(id) })
+        } catch (e: Throwable) {
+            // Nothing was saved, so the uploaded files would be orphans. Clean up even when
+            // the save was cancelled; a file that can't be deleted now is left behind.
+            withContext(NonCancellable) {
+                uploadedPaths.forEach { path -> runCatching { photoStorage.delete(path) } }
+            }
+            throw e
+        }
     }
 
     override suspend fun updatePlace(placeId: String, details: PlaceDetails): Place {
@@ -197,6 +229,7 @@ class FirestorePlaceRepository(
 
     private companion object {
         const val PLACES = "places"
+        const val PHOTOS = "photos"
         const val MAX_BATCH_WRITES = 500
     }
 }

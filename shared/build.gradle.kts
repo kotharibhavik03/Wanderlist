@@ -50,6 +50,8 @@ kotlin {
             implementation(libs.play.services.location)
             // Coil's network layer on Android.
             implementation(libs.ktor.client.okhttp)
+            // Reads which way up a photo was taken, so compressed photos aren't sideways.
+            implementation(libs.androidx.exifinterface)
         }
         iosMain.dependencies {
             // Coil's network layer on iOS.

@@ -34,8 +34,12 @@ interface PlaceRepository {
      */
     fun observeSharedWithMe(): Flow<List<SharedPlace>>
 
-    /** Saves a place owned by the signed-in user. Throws if nobody is signed in. */
-    suspend fun createPlace(newPlace: NewPlace): Place
+    /**
+     * Saves a place owned by the signed-in user, with its photos. All or nothing: if any
+     * photo fails to upload, nothing is saved and the files already uploaded are removed.
+     * [onPhotoUploaded] reports how many photos are up so far. Throws if nobody is signed in.
+     */
+    suspend fun createPlace(newPlace: NewPlace, onPhotoUploaded: (uploaded: Int) -> Unit = {}): Place
 
     /**
      * Applies [details] to a place. The owner may change everything; a collaborator may not

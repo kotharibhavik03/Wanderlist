@@ -27,7 +27,8 @@ A travel journal for Android and iOS, built from one Kotlin Multiplatform codeba
 - **Clean Architecture** (domain / data / views) with **MVVM**: `StateFlow` UI state, `Channel` for one-shot events
 - **Navigation 3** with a serializable `Route` back stack
 - **Koin** for dependency injection
-- **Firebase Auth** via **KMPAuth** (Google sign-in) and **Cloud Firestore** via the GitLive Firebase Kotlin SDK, with security rules in `firestore.rules`
+- **Firebase Auth** via **KMPAuth** (Google sign-in), **Cloud Firestore** and **Cloud Storage** via the GitLive Firebase Kotlin SDK, with security rules in `firestore.rules` and `storage.rules`
+- **Coil 3** (with Ktor) for images; photos are compressed on the device (1600 px, JPEG 80%) before upload
 - **Google Maps** on both platforms via [kmp-maps-compose](https://github.com/yankeppey/kmp-maps-compose) (Compose markers on Android and iOS)
 - Coroutines and kotlinx.serialization
 
@@ -48,10 +49,10 @@ The Firebase config files are not committed. Create your own Firebase project wi
 
 and replace the Google OAuth client IDs with your project's: the web client ID in `shared/src/commonMain/kotlin/com/rizz/wanderlist/config/AuthConfig.kt`, and `GIDClientID` plus the reversed-client-ID URL scheme in `iosApp/iosApp/Info.plist`.
 
-Create a Firestore database in the same project (production mode), then deploy the security rules in `firestore.rules`, either by pasting them into Firebase console → Firestore → Rules, or with the [Firebase CLI](https://firebase.google.com/docs/cli):
+Create a Firestore database and a Storage bucket in the same project (both in production mode; Storage needs the Blaze plan), then deploy the security rules in `firestore.rules` and `storage.rules`, either by pasting them into Firebase console → Firestore → Rules and Storage → Rules, or with the [Firebase CLI](https://firebase.google.com/docs/cli):
 
 ```sh
-firebase deploy --only firestore:rules --project <your-project-id>
+firebase deploy --only firestore:rules,storage --project <your-project-id>
 ```
 
 For the map, enable **Maps SDK for Android** and **Maps SDK for iOS** in the same Google Cloud project and create one API key per platform, each restricted to its app (Android: package name + SHA-1; iOS: bundle ID) and its Maps SDK. Keep the keys out of Git:

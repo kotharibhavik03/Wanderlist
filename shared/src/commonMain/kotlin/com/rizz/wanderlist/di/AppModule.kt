@@ -4,8 +4,10 @@ import com.rizz.wanderlist.data.firestore.FirestoreCollectionRepository
 import com.rizz.wanderlist.data.firestore.FirestorePlaceRepository
 import com.rizz.wanderlist.data.firestore.FirestoreProfileRepository
 import com.rizz.wanderlist.data.repository.KmpAuthRepository
+import com.rizz.wanderlist.data.storage.FirebasePhotoStorage
 import com.rizz.wanderlist.domain.repository.AuthRepository
 import com.rizz.wanderlist.domain.repository.CollectionRepository
+import com.rizz.wanderlist.domain.repository.PhotoStorage
 import com.rizz.wanderlist.domain.repository.PlaceRepository
 import com.rizz.wanderlist.domain.repository.ProfileRepository
 import com.rizz.wanderlist.domain.usecase.CreateCollectionUseCase
@@ -26,11 +28,14 @@ import com.rizz.wanderlist.views.place.PlaceDetailViewModel
 import com.rizz.wanderlist.views.profile.ProfileViewModel
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.firestore.firestore
+import dev.gitlive.firebase.storage.storage
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
 val appModule = module {
     single { Firebase.firestore }
+    single { Firebase.storage }
+    single<PhotoStorage> { FirebasePhotoStorage(get()) }
     single<CollectionRepository> { FirestoreCollectionRepository(get(), get()) }
     factory { CreateCollectionUseCase(get()) }
     factory { DeleteCollectionUseCase(get(), get()) }
@@ -47,12 +52,11 @@ val appModule = module {
     viewModel { MapPickerViewModel(get(), get(), get()) }
     viewModel { SignInViewModel() }
 
-    viewModel { AddPlaceViewModel(get(), get(), get(), get(), get()) }
+    viewModel { AddPlaceViewModel(get(), get(), get(), get(), get(), get()) }
 
-    single<PlaceRepository> { FirestorePlaceRepository(get(), get()) }
+    single<PlaceRepository> { FirestorePlaceRepository(get(), get(), get()) }
     factory { SavePlaceUseCase(get()) }
     factory { UpdatePlaceUseCase(get()) }
     viewModel { (collectionId: String) -> CollectionDetailViewModel(collectionId, get(), get(), get()) }
     viewModel { (placeId: String) -> PlaceDetailViewModel(placeId, get(), get(), get(), get()) }
-
 }

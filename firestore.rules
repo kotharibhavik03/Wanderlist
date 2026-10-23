@@ -156,6 +156,48 @@ service cloud.firestore {
         );
 
       allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+
+      // places/{placeId}/photos/{photoId}: one document per photo, so a private photo can be
+      // hidden from everyone but its uploader (rules can't hide part of a document). The file
+      // itself is in Storage, under the uploader's own folder (see storage.rules).
+      match /photos/{photoId} {
+
+        function placePath() {
+          return /databases/$(database)/documents/places/$(placeId);
+        }
+
+        function canSeePlace(place) {
+          return place.ownerId == request.auth.uid || myEmail() in place.memberEmails;
+        }
+
+        // Field names mirror PhotoDocument. The URL must be a Firebase Storage download URL.
+        function isValidPhoto(data) {
+          return data.keys().hasOnly(['uploaderId', 'url', 'isPrivate', 'createdAt'])
+            && data.url is string && data.url.size() <= 2000
+            && data.url.matches('https://firebasestorage[.]googleapis[.]com/.*')
+            && data.isPrivate is bool
+            && data.createdAt is int;
+        }
+
+        // Shared photos: everyone on the place. Private photos: only their uploader. A list
+        // query must filter on isPrivate == false, or on uploaderId == the caller's uid.
+        allow read: if signedIn()
+          && canSeePlace(get(placePath()).data)
+          && (resource.data.isPrivate == false || resource.data.uploaderId == request.auth.uid);
+
+        // Anyone on the place adds their own photos. getAfter, so a new place and its photos
+        // can be written in one batch. Each photo costs one document lookup and a batch may
+        // make at most 20, so one save carries at most 10 photos (MAX_PHOTOS_PER_SAVE).
+        allow create: if signedIn()
+          && request.resource.data.uploaderId == request.auth.uid
+          && isValidPhoto(request.resource.data)
+          && canSeePlace(getAfter(placePath()).data);
+
+        // The uploader removes their own photo; the owner can remove any photo on their place.
+        allow delete: if signedIn()
+          && (resource.data.uploaderId == request.auth.uid
+              || get(placePath()).data.ownerId == request.auth.uid);
+      }
     }
   }
 }

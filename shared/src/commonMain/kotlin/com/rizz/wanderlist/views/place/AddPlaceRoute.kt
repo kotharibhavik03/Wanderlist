@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rizz.wanderlist.views.photo.rememberPhotoPicker
 
 @Composable
 fun AddPlaceRoute(
@@ -17,6 +18,11 @@ fun AddPlaceRoute(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val collections by viewModel.collections.collectAsStateWithLifecycle()
     val currentOnSaved by rememberUpdatedState(onSaved)
+    // Asks for at most what's left of the limit (a picker can't take back extra choices).
+    val photoPicker = rememberPhotoPicker(
+        maxItems = uiState.photoRoom.coerceAtLeast(1),
+        onPicked = viewModel::onPhotosPicked
+    )
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
@@ -37,7 +43,7 @@ fun AddPlaceRoute(
             onStatusChange = viewModel::onStatusChange,
             onVisitedOnChange = viewModel::onVisitedOnChange,
             onRatingChange = viewModel::onRatingChange,
-            onAddPhotos = { /* the photo picker arrives in the media step */ },
+            onAddPhotos = photoPicker::launch,
             onPhotoRemoved = viewModel::onPhotoRemoved,
             onPhotoPrivacyToggled = viewModel::onPhotoPrivacyToggled,
             onMarkerStyleChange = viewModel::onMarkerStyleChange,

@@ -13,8 +13,8 @@ import kotlinx.serialization.Serializable
  * firestore.rules checks the same names. Enums are stored as their names and read back
  * leniently, so an unknown value from a newer app version doesn't break decoding.
  *
- * Photos are not stored here: rules can't hide part of a document, so private photos need
- * their own subcollection (added with the photo step).
+ * Photos are not stored here: rules can't hide part of a document, so each photo is its own
+ * document in the `photos` subcollection (see PhotoDocument).
  */
 @Serializable
 internal data class PlaceDocument(

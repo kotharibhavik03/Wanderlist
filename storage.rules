@@ -1,0 +1,31 @@
+rules_version = '2';
+
+// Wanderlist Storage rules: photo files. Who may see a photo is decided in Firestore
+// (firestore.rules, places/{placeId}/photos), whose documents hold the download URLs.
+// Deploy after every change (see README).
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // places/{placeId}/{uploaderId}/{photoId}.jpg: everyone writes only in their own folder.
+    match /places/{placeId}/{uploaderId}/{fileName} {
+
+      function isUploader() {
+        return request.auth != null && request.auth.uid == uploaderId;
+      }
+
+      // Through the SDK, only the uploader (it fetches the download URL right after uploading).
+      // Everyone else loads a photo from its download URL, which they can only find in a
+      // Firestore photo document they're allowed to read.
+      allow read: if isUploader();
+
+      // New files only (an existing file can't be overwritten), compressed JPEGs under 5 MB.
+      allow create: if isUploader()
+        && fileName.matches('[A-Za-z0-9_-]+[.]jpg')
+        && request.resource.contentType == 'image/jpeg'
+        && request.resource.size < 5 * 1024 * 1024;
+
+      allow delete: if isUploader();
+    }
+  }
+}
