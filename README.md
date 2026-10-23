@@ -1,31 +1,51 @@
-This is a Kotlin Multiplatform project targeting Android, iOS.
+# Wanderlist
 
-* [/iosApp](./iosApp/iosApp) contains an iOS application. Even if you’re sharing your UI with Compose Multiplatform,
-  you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
+A travel journal for Android and iOS, built from one Kotlin Multiplatform codebase with Compose Multiplatform. Save the places you've been to or want to visit, group them into collections, attach photos, and share individual places with the people you went with.
 
-* [/shared](./shared/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-  - [commonMain](./shared/src/commonMain/kotlin) is for code that’s common for all targets.
-  - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-    For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-    the [iosMain](./shared/src/iosMain/kotlin) folder would be the right place for such calls.
-    Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./shared/src/jvmMain/kotlin)
-    folder is the appropriate location.
+> **Status:** work in progress. Sign-in, collections and adding places work. Data is currently held in memory; Firestore, Google Maps and photo uploads come next.
 
-### Running the apps
+## Features
 
-Use the run configurations provided by the run widget in your IDE's toolbar. You can also use these commands and options:
+| | Status |
+|---|---|
+| Google sign-in (Android + iOS) | Done |
+| Collections with an emoji icon and multi-colour gradient | Done |
+| Places: name, notes, coordinates, address, Wishlist / Visited, visit date, 1–5 rating | Done (in-memory) |
+| Collection page with places and an "All photos" grid | Done (in-memory) |
+| Google Maps with custom markers, pin-drop location picker | Planned |
+| Photos per place, with private photos visible only to their uploader | Planned |
+| Share a place by email as Collaborator or "Visited with" | Planned |
+| Directions via Google Maps / Apple Maps | Planned |
 
-- Android app: `./gradlew :androidApp:assembleDebug`
-- iOS app: open the [/iosApp](./iosApp) directory in Xcode and run it from there.
+## Tech stack
 
-### Running tests
+- **Kotlin Multiplatform** + **Compose Multiplatform** (shared UI for Android and iOS)
+- **Clean Architecture** (domain / data / views) with **MVVM**: `StateFlow` UI state, `Channel` for one-shot events
+- **Navigation 3** with a serializable `Route` back stack
+- **Koin** for dependency injection
+- **Firebase Auth** via **KMPAuth** (Google sign-in)
+- Coroutines and kotlinx.serialization
 
-Use the run button in your IDE's editor gutter, or run tests using Gradle tasks:
+## Project layout
 
-- Android tests: `./gradlew :shared:testAndroidHostTest`
-- iOS tests: `./gradlew :shared:iosSimulatorArm64Test`
+```
+shared/      Shared Kotlin code: domain, data, navigation, and all Compose UI
+androidApp/  Android entry point
+iosApp/      iOS entry point (Xcode project, Swift Package Manager dependencies)
+```
 
----
+## Running locally
 
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)…
+The Firebase config files are not committed. Create your own Firebase project with Google sign-in enabled, then add:
+
+- `androidApp/google-services.json`
+- `iosApp/GoogleService-Info.plist`
+
+and replace the Google OAuth client IDs with your project's: the web client ID in `shared/src/commonMain/kotlin/com/rizz/wanderlist/config/AuthConfig.kt`, and `GIDClientID` plus the reversed-client-ID URL scheme in `iosApp/iosApp/Info.plist`.
+
+Then:
+
+- **Android:** `./gradlew :androidApp:assembleDebug`, or run `androidApp` from Android Studio.
+- **iOS:** open `iosApp/iosApp.xcodeproj` in Xcode and run.
+
+Requirements: JDK 17+, Android Studio, Xcode (iOS 16+ deployment target).
