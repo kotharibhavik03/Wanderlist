@@ -27,4 +27,7 @@ sealed interface Route : NavKey {
 
     @Serializable
     data class CollectionDetail(val collectionId: String) : Route
+
+    @Serializable
+    data class PlaceDetail(val placeId: String) : Route
 }

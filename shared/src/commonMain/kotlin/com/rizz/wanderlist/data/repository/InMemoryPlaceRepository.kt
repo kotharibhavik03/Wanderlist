@@ -1,9 +1,13 @@
 package com.rizz.wanderlist.data.repository
 
+import com.rizz.wanderlist.domain.model.MemberRole
 import com.rizz.wanderlist.domain.model.NewPlace
 import com.rizz.wanderlist.domain.model.Place
+import com.rizz.wanderlist.domain.model.PlaceAccess
 import com.rizz.wanderlist.domain.model.PlacePhoto
 import com.rizz.wanderlist.domain.model.SharedPlace
+import com.rizz.wanderlist.domain.model.User
+import com.rizz.wanderlist.domain.model.accessFor
 import com.rizz.wanderlist.domain.repository.AuthRepository
 import com.rizz.wanderlist.domain.repository.PlaceRepository
 import kotlin.time.Clock
@@ -20,9 +24,19 @@ class InMemoryPlaceRepository(private val authRepository: AuthRepository) : Plac
     private val places = MutableStateFlow<List<Place>>(emptyList())
 
     override fun observePlaces(collectionId: String): Flow<List<Place>> =
-        places.map { all ->
+        combine(places, authRepository.currentUser) { all, user ->
+            if (user == null) return@combine emptyList()
             all.filter { it.collectionId == collectionId }
                 .sortedByDescending { it.createdAtEpochMillis }
+                .map { it.visibleTo(user) }
+        }
+
+    override fun observePlace(placeId: String): Flow<Place?> =
+        combine(places, authRepository.currentUser) { all, user ->
+            if (user == null) return@combine null
+            all.firstOrNull { it.id == placeId }
+                ?.takeIf { it.accessFor(user) != null }
+                ?.visibleTo(user)
         }
 
     override fun observePlaceCounts(): Flow<Map<String, Int>> =
@@ -30,14 +44,14 @@ class InMemoryPlaceRepository(private val authRepository: AuthRepository) : Plac
 
     override fun observeSharedWithMe(): Flow<List<SharedPlace>> =
         combine(places, authRepository.currentUser) { all, user ->
-            val myEmail = user?.email?.lowercase() ?: return@combine emptyList()
-            all.filter { it.ownerId != user.id }
-                .mapNotNull { place ->
-                    // Member emails are stored lowercase, see AddPlaceViewModel.onMemberAdded.
-                    place.members.firstOrNull { it.email == myEmail }
-                        ?.let { SharedPlace(place, it.role) }
+            if (user == null) return@combine emptyList()
+            all.mapNotNull { place ->
+                when (place.accessFor(user)) {
+                    PlaceAccess.COLLABORATOR -> SharedPlace(place.visibleTo(user), MemberRole.COLLABORATOR)
+                    PlaceAccess.VISITED_WITH -> SharedPlace(place.visibleTo(user), MemberRole.VISITED_WITH)
+                    PlaceAccess.OWNER, null -> null
                 }
-                .sortedByDescending { it.place.createdAtEpochMillis }
+            }.sortedByDescending { it.place.createdAtEpochMillis }
         }
 
     override suspend fun createPlace(newPlace: NewPlace): Place {
@@ -68,4 +82,8 @@ class InMemoryPlaceRepository(private val authRepository: AuthRepository) : Plac
         places.update { it + place }
         return place
     }
+
+    /** A private photo is visible only to the person who uploaded it. */
+    private fun Place.visibleTo(user: User): Place =
+        copy(photos = photos.filter { !it.isPrivate || it.uploaderId == user.id })
 }

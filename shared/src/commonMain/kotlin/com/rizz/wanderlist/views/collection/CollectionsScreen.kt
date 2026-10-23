@@ -59,6 +59,7 @@ private enum class CollectionsSegment(val label: String) {
 fun CollectionsRoute(
     onAddClick: () -> Unit,
     onCollectionClick: (collectionId: String) -> Unit,
+    onSharedPlaceClick: (placeId: String) -> Unit,
     onSignOutClick: () -> Unit,
     viewModel: CollectionsViewModel = koinViewModel()
 ) {
@@ -67,6 +68,7 @@ fun CollectionsRoute(
         uiState = uiState,
         onAddClick = onAddClick,
         onCollectionClick = onCollectionClick,
+        onSharedPlaceClick = onSharedPlaceClick,
         onSignOutClick = onSignOutClick
     )
 }
@@ -77,6 +79,7 @@ fun CollectionsScreen(
     uiState: CollectionsUiState,
     onAddClick: () -> Unit,
     onCollectionClick: (collectionId: String) -> Unit,
+    onSharedPlaceClick: (placeId: String) -> Unit,
     onSignOutClick: () -> Unit,
 ) {
     var segment by rememberSaveable { mutableStateOf(CollectionsSegment.MINE) }
@@ -112,7 +115,7 @@ fun CollectionsScreen(
 
                 is CollectionsUiState.Content -> when (segment) {
                     CollectionsSegment.MINE -> MyCollections(uiState.collections, onCollectionClick)
-                    CollectionsSegment.SHARED -> SharedWithMe(uiState.sharedPlaces)
+                    CollectionsSegment.SHARED -> SharedWithMe(uiState.sharedPlaces, onSharedPlaceClick)
                 }
             }
         }
@@ -162,7 +165,10 @@ private fun MyCollections(
 }
 
 @Composable
-private fun SharedWithMe(sharedPlaces: List<SharedPlace>) {
+private fun SharedWithMe(
+    sharedPlaces: List<SharedPlace>,
+    onPlaceClick: (placeId: String) -> Unit
+) {
     if (sharedPlaces.isEmpty()) {
         EmptyMessage(
             "Nothing shared with you yet. When someone adds your Google email to a place, it appears here."
@@ -173,15 +179,17 @@ private fun SharedWithMe(sharedPlaces: List<SharedPlace>) {
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(sharedPlaces, key = { it.place.id }) { SharedPlaceCard(it) }
+        items(sharedPlaces, key = { it.place.id }) { shared ->
+            SharedPlaceCard(shared, onClick = { onPlaceClick(shared.place.id) })
+        }
     }
 }
 
 /** A place shared with me. Its collection is private to the owner, so the marker falls back to a pin. */
 @Composable
-private fun SharedPlaceCard(shared: SharedPlace) {
+private fun SharedPlaceCard(shared: SharedPlace, onClick: () -> Unit) {
     val place = shared.place
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,

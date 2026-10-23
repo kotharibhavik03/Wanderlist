@@ -15,6 +15,7 @@ import com.rizz.wanderlist.views.collection.CollectionDetailViewModel
 import com.rizz.wanderlist.views.collection.CollectionsViewModel
 import com.rizz.wanderlist.views.collection.CreateCollectionViewModel
 import com.rizz.wanderlist.views.place.AddPlaceViewModel
+import com.rizz.wanderlist.views.place.PlaceDetailViewModel
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
@@ -34,5 +35,6 @@ val appModule = module {
     single<PlaceRepository> { InMemoryPlaceRepository(get()) }
     factory { SavePlaceUseCase(get()) }
     viewModel { (collectionId: String) -> CollectionDetailViewModel(collectionId, get(), get()) }
+    viewModel { (placeId: String) -> PlaceDetailViewModel(placeId, get(), get(), get()) }
 
 }

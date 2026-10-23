@@ -12,6 +12,12 @@ interface PlaceRepository {
      */
     fun observePlaces(collectionId: String): Flow<List<Place>>
 
+    /**
+     * One place, or null when it doesn't exist or the signed-in user may not see it
+     * (not the owner and not a member). Same photo visibility as [observePlaces].
+     */
+    fun observePlace(placeId: String): Flow<Place?>
+
     /** How many places each collection holds, keyed by collection id. Missing key means none. */
     fun observePlaceCounts(): Flow<Map<String, Int>>
 

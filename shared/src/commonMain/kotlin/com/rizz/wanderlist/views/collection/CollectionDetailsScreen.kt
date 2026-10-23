@@ -65,18 +65,20 @@ import org.koin.core.parameter.parametersOf
 fun CollectionDetailRoute(
     collectionId: String,
     onBack: () -> Unit,
+    onPlaceClick: (placeId: String) -> Unit,
     onAddPlace: () -> Unit
 ) {
     val viewModel: CollectionDetailViewModel =
         koinViewModel(parameters = { parametersOf(collectionId) })
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    CollectionDetailScreen(uiState, onBack, onAddPlace)
+    CollectionDetailScreen(uiState, onBack, onPlaceClick, onAddPlace)
 }
 
 @Composable
 fun CollectionDetailScreen(
     uiState: CollectionDetailUiState,
     onBack: () -> Unit,
+    onPlaceClick: (placeId: String) -> Unit,
     onAddPlace: () -> Unit
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -122,7 +124,7 @@ fun CollectionDetailScreen(
                     )
                 }
                 if (tab == 0) {
-                    PlacesTab(collection, uiState.places)
+                    PlacesTab(collection, uiState.places, onPlaceClick)
                 } else {
                     PhotosTab(uiState.photos)
                 }
@@ -163,7 +165,11 @@ private fun Header(collection: PlaceCollection, placeCount: Int, photoCount: Int
 }
 
 @Composable
-private fun PlacesTab(collection: PlaceCollection, places: List<Place>) {
+private fun PlacesTab(
+    collection: PlaceCollection,
+    places: List<Place>,
+    onPlaceClick: (placeId: String) -> Unit
+) {
     if (places.isEmpty()) {
         EmptyState("No places yet", "Tap Add place to save your first one here.")
         return
@@ -173,12 +179,14 @@ private fun PlacesTab(collection: PlaceCollection, places: List<Place>) {
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(places, key = { it.id }) { PlaceCard(it, collection) }
+        items(places, key = { it.id }) { place ->
+            PlaceCard(place, collection, onClick = { onPlaceClick(place.id) })
+        }
     }
 }
 
 @Composable
-private fun PlaceCard(place: Place, collection: PlaceCollection) {
+private fun PlaceCard(place: Place, collection: PlaceCollection, onClick: () -> Unit) {
     val meta = buildList {
         add(if (place.status == PlaceStatus.VISITED) "Visited" else "Want to visit")
         place.visitedOnEpochMillis?.let { add(formatDate(it)) }
@@ -187,7 +195,7 @@ private fun PlaceCard(place: Place, collection: PlaceCollection) {
         if (place.members.isNotEmpty()) add(pluralize(place.members.size, "person", "people"))
     }.joinToString(" · ")
 
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,

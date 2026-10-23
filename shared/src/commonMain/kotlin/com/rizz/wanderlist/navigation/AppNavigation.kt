@@ -33,6 +33,7 @@ import com.rizz.wanderlist.views.home.HomeRoute
 import com.rizz.wanderlist.views.place.AddPlaceRoute
 import com.rizz.wanderlist.views.place.AddPlaceViewModel
 import com.rizz.wanderlist.views.place.MapPickerRoute
+import com.rizz.wanderlist.views.place.PlaceDetailRoute
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import org.koin.compose.viewmodel.koinViewModel
@@ -59,6 +60,7 @@ private val navConfig = SavedStateConfiguration {
             subclass(Route.CollectionDetail::class,
                 Route.CollectionDetail.serializer()
             )
+            subclass(Route.PlaceDetail::class, Route.PlaceDetail.serializer())
 
         }
     }
@@ -176,6 +178,7 @@ fun AppNavigation(onSignOut: () -> Unit) {
                     CollectionsRoute(
                         onAddClick = { backStack.add(Route.CreateCollection) },
                         onCollectionClick = { id -> backStack.add(Route.CollectionDetail(id)) },
+                        onSharedPlaceClick = { id -> backStack.add(Route.PlaceDetail(id)) },
                         onSignOutClick = {
                             addPlaceViewModel.clearDraft()
                             onSignOut()
@@ -230,10 +233,18 @@ fun AppNavigation(onSignOut: () -> Unit) {
                     CollectionDetailRoute(
                         collectionId = key.collectionId,
                         onBack = { backStack.removeLastOrNull() },
+                        onPlaceClick = { id -> backStack.add(Route.PlaceDetail(id)) },
                         onAddPlace = {
                             addPlaceViewModel.onCollectionSelected(key.collectionId)
                             backStack.add(Route.AddPlace)
                         }
+                    )
+                }
+
+                entry<Route.PlaceDetail> { key ->
+                    PlaceDetailRoute(
+                        placeId = key.placeId,
+                        onBack = { backStack.removeLastOrNull() }
                     )
                 }
             }

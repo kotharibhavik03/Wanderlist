@@ -52,6 +52,7 @@ Kotlin Multiplatform + Compose Multiplatform travel app (Android + iOS from one 
 - One "Notes" field (description and notes merged).
 - Photos shared by default, with a lock toggle for private.
 - "Shared with me" is a segment on the Collections tab.
+- Place detail (`Route.PlaceDetail(placeId)`, `PlaceDetailRoute/Screen/ViewModel`), opened from collection-page place cards and Shared-with-me cards. Read-only: header (marker, name, "Listed as", status and shared-role pills), Directions, details card (location, visit date, rating, collection for owner only, notes), photos row, people. `PlaceAccess` + `Place.accessFor(user)` in domain. `PlaceRepository.observePlace(id)` returns null unless owner or member; in-memory repo now hides other people's private photos (`visibleTo`). Directions: `util/Directions.kt` with `expect val directionsApps` (Android: Google Maps; iOS: Apple Maps, Google Maps) opened via `LocalUriHandler` https links.
 
 ## Status
 
@@ -72,19 +73,23 @@ Kotlin Multiplatform + Compose Multiplatform travel app (Android + iOS from one 
 - (nothing)
 
 ### Pending, in order
-1. **UI-4.** Place detail (make `SharedPlaceCard` and collection-page `PlaceCard` open it) (photo pager, details, Directions, Edit, Leave place), full-screen photo viewer, Profile (avatar, name, email, sign out), Home map extras (marker bottom sheet, collection filter chips, my-location button, `HomeViewModel`).
+1. **UI-4**, remaining steps in order:
+   - Edit place (reuse the Add Place form in edit mode; owner and collaborators) and Leave place (members only; their photos on it go with them). Show these on Place detail based on `PlaceAccess`.
+   - Profile (avatar, name, email, sign out; move Sign out off the Collections top bar).
+   - Home map extras (marker bottom sheet, collection filter chips, my-location button, `HomeViewModel`).
+   - Full-screen photo viewer moves to the Photos step (nothing to view until the picker works).
 2. **Theme polish.** Typography, Shapes, semantic colours (Visited / Wishlist), status-bar style.
 3. **Functional phase** (only after the UI is done):
-   - Firestore: **verify the GitLive `firebase-firestore` version matches KMPAuth's GitLive 3.0.0-alpha01**; link FirebaseFirestore via SPM on iOS; security rules; `FirestoreCollectionRepository` and `FirestorePlaceRepository`. Denormalise member-ids / member-emails arrays on the place for rules and queries, and the owner's name/email so "Shared with me" can show who shared it.
+   - Firestore: **verify the GitLive `firebase-firestore` version matches KMPAuth's GitLive 3.0.0-alpha01**; link FirebaseFirestore via SPM on iOS; security rules; `FirestoreCollectionRepository` and `FirestorePlaceRepository`. Denormalise member-ids / member-emails arrays on the place for rules and queries, and the owner's name/email so "Shared with me" can show who shared it. **Scope per user** (fixes the account-switch leak): add `ownerId` to `PlaceCollection`; collections query only the signed-in user's; `observePlaces(collectionId)` and place counts return only places the user owns; rules: a collection is readable only by its owner, a place by its owner or an email in `memberEmails`.
    - Google Maps: expect/actual wrapper (Maps Compose on Android, native SDK on iOS), custom markers, real Map Picker with pin-drop and free geocoders. API key stays out of Git.
    - Photos: picker (expect/actual), compression, Coil 3, Firebase Storage behind `PhotoStorage`. Replace local-uri photo ids with real ids and map `MarkerStyle.Photo` on upload.
    - Collaboration: `users` collection with email lookup, invites for unregistered emails resolved on first sign-in, leave-place, visibility rules.
-   - Directions intents, change profile photo, then CI, README and polish.
+   - Change profile photo, then CI, README and polish. (Directions already done via https links.)
 
 ### Known gaps and cleanup to fold into upcoming steps
 - Save on Add Place only works via the manual location form; the real map comes later.
 - Photo picker is a stub (`onAddPhotos` does nothing), so photo tiles and All-photos are empty.
-- All data is in-memory and lost on restart. Collections are not scoped per user, so switching accounts shows the previous account's collections until Firestore.
+- All data is in-memory and lost on restart. In-memory stores survive sign-out and collections have no owner, so after switching accounts the new user sees the previous user's collections (and, through the collection page, its places). Accepted until Firestore; see the Firestore item.
 - Add Place doesn't check whether an invited email is the user's own.
 - `HomeRoute`: hardcoded "0 Places", two actions both wired to `onFilterClick`, unused `onCollectionsClick` / `onProfileClick` / `innerPadding`.
 - `views/mapPicker/MapPickerRoute.kt` declares package `views.place` (folder/package mismatch).
