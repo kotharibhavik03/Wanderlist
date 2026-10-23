@@ -51,6 +51,7 @@ kotlin {
             implementation(compose.materialIconsExtended)
 
             implementation(libs.androidx.navigation3.ui)
+            implementation(libs.androidx.navigationevent.compose)
             implementation(libs.androidx.lifecycle.viewmodelNavigation3)
             implementation(libs.androidx.savedstate)
             implementation(libs.kotlinx.serialization.core)

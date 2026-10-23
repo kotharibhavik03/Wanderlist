@@ -17,6 +17,8 @@ kotlinx-coroutines = "1.11.0"
 composeMultiplatform = "1.12.2"
 
 navigation3 = "1.2.0-rc01"
+# Same version Navigation 3 brings in; declared so shared code can handle Back (sheets, dialogs).
+navigationevent = "1.1.0"
 androidx-savedstate = "1.4.0"
 kotlinx-serialization = "1.11.0"
 
@@ -54,6 +56,7 @@ koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
 koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin" }
 koin-composeViewModel = { module = "io.insert-koin:koin-compose-viewmodel", version.ref = "koin" }
 
+androidx-navigationevent-compose = { module = "org.jetbrains.androidx.navigationevent:navigationevent-compose", version.ref = "navigationevent" }
 androidx-navigation3-ui = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version.ref = "navigation3" }
 androidx-lifecycle-viewmodelNavigation3 = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-navigation3", version.ref = "androidx-lifecycle" }
 androidx-savedstate = { module = "org.jetbrains.androidx.savedstate:savedstate", version.ref = "androidx-savedstate" }

@@ -121,6 +121,7 @@ fun PlaceDetailScreen(
     onErrorShown: () -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     val content = uiState as? PlaceDetailUiState.Content
     var pendingAction by rememberSaveable { mutableStateOf<RemoveAction?>(null) }
 
@@ -172,7 +173,11 @@ fun PlaceDetailScreen(
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
                 Header(uiState.place, uiState.access, uiState.collection)
-                DirectionsButton(uiState.place, snackbarHostState)
+                DirectionsButton(
+                    place = uiState.place,
+                    onError = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
+                    modifier = Modifier.fillMaxWidth()
+                )
                 DetailsCard(uiState.place, uiState.collection)
                 PhotosSection(uiState.place.photos)
                 PeopleSection(uiState.people)
@@ -283,9 +288,13 @@ private fun Header(place: Place, access: PlaceAccess, collection: PlaceCollectio
 
 /** One app: open it straight away. Several (iOS): let the user pick. */
 @Composable
-private fun DirectionsButton(place: Place, snackbarHostState: SnackbarHostState) {
+internal fun DirectionsButton(
+    place: Place,
+    /** Called with a message to show when no app on the device can open the link. */
+    onError: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
     val uriHandler = LocalUriHandler.current
-    val scope = rememberCoroutineScope()
     var showMenu by rememberSaveable { mutableStateOf(false) }
 
     fun open(app: DirectionsApp) {
@@ -293,11 +302,11 @@ private fun DirectionsButton(place: Place, snackbarHostState: SnackbarHostState)
             uriHandler.openUri(directionsUrl(app, place.latitude, place.longitude))
         } catch (e: IllegalArgumentException) {
             // Thrown when no app on the device can open the link.
-            scope.launch { snackbarHostState.showSnackbar("Couldn't open ${app.label}.") }
+            onError("Couldn't open ${app.label}.")
         }
     }
 
-    Box {
+    Box(modifier = modifier) {
         Button(
             onClick = {
                 if (directionsApps.size == 1) open(directionsApps.first()) else showMenu = true
@@ -323,7 +332,7 @@ private fun DirectionsButton(place: Place, snackbarHostState: SnackbarHostState)
 }
 
 @Composable
-private fun DetailsCard(place: Place, collection: PlaceCollection?) {
+internal fun DetailsCard(place: Place, collection: PlaceCollection?) {
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -382,7 +391,7 @@ private fun DetailRow(icon: ImageVector, label: String, content: @Composable Col
 
 /** Read-only stars, announced as one phrase instead of five separate icons. */
 @Composable
-private fun RatingStars(rating: Int) {
+internal fun RatingStars(rating: Int) {
     Row(modifier = Modifier.clearAndSetSemantics { contentDescription = "$rating out of 5 stars" }) {
         (1..5).forEach { star ->
             Icon(
@@ -405,7 +414,7 @@ private fun SectionTitle(text: String) {
 }
 
 @Composable
-private fun PhotosSection(photos: List<PlacePhoto>) {
+internal fun PhotosSection(photos: List<PlacePhoto>) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionTitle("Photos (${photos.size})")
         if (photos.isEmpty()) {

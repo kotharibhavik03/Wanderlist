@@ -24,9 +24,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import com.rizz.wanderlist.views.place.PlaceMarker
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import com.rizz.wanderlist.views.theme.DarkMapStyleJson
 import com.rizz.wanderlist.views.theme.isDark
+import eu.buney.maps.CameraMoveStartedReason
 import eu.buney.maps.CameraPosition
+import eu.buney.maps.CameraPositionState
 import eu.buney.maps.CameraUpdate
 import eu.buney.maps.CameraUpdateFactory
 import eu.buney.maps.GoogleMap
@@ -45,11 +50,20 @@ private val WorldView = CameraPosition(LatLng(20.0, 0.0), 1.5f, 0f, 0f)
 /** Zoom used when every place is at the same point, where bounds would zoom in all the way. */
 private const val SinglePlaceZoom = 12f
 
-/** The places the filter chips select, as markers. Tapping a marker reports that place's id. */
+/** Selecting a place zooms in to at least this level, so its surroundings are recognisable. */
+private const val SelectedPlaceMinZoom = 12f
+
+/**
+ * The places the filter chips select, as markers. Tapping a marker reports that place's id;
+ * the selected place's marker is drawn larger and the camera moves to it.
+ */
 @Composable
 internal fun PlacesMap(
     places: List<HomePlace>,
+    selectedPlaceId: String?,
     onMarkerClick: (placeId: String) -> Unit,
+    /** A tap on the map itself, not on a marker. */
+    onMapClick: () -> Unit,
     modifier: Modifier = Modifier,
     /** Space taken by controls drawn over the map. Framing and Google's logo stay clear of it. */
     contentPadding: PaddingValues = PaddingValues()
@@ -68,12 +82,23 @@ internal fun PlacesMap(
         if (mapLoaded && places.isNotEmpty()) cameraState.animate(cameraUpdateFor(places))
     }
 
+    // Bring the selected place into view, centred in the area the overlays leave visible.
+    LaunchedEffect(mapLoaded, selectedPlaceId) {
+        val selected = places.firstOrNull { it.place.id == selectedPlaceId } ?: return@LaunchedEffect
+        if (!mapLoaded) return@LaunchedEffect
+        val zoom = maxOf(cameraState.position.zoom, SelectedPlaceMinZoom)
+        cameraState.animateOrJump(
+            CameraUpdateFactory.newLatLngZoom(LatLng(selected.place.latitude, selected.place.longitude), zoom)
+        )
+    }
+
     Box(modifier = modifier) {
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraState,
             properties = properties,
             contentPadding = contentPadding,
+            onMapClick = { onMapClick() },
             uiSettings = MapUiSettings(
                 mapToolbarEnabled = false,
                 zoomControlsEnabled = false,
@@ -84,19 +109,22 @@ internal fun PlacesMap(
             places.forEach { item ->
                 key(item.place.id) {
                     val place = item.place
+                    val isSelected = place.id == selectedPlaceId
                     MarkerComposable(
                         // Re-render the marker image only when its look changes.
-                        place.markerStyle, item.collection?.icon.orEmpty(), item.collection?.colors.orEmpty(),
+                        place.markerStyle, item.collection?.icon.orEmpty(), item.collection?.colors.orEmpty(), isSelected,
                         state = rememberUpdatedMarkerState(LatLng(place.latitude, place.longitude)),
                         title = place.displayName,
                         // Centred on the spot: the badge is a circle, not a pin with a point.
                         anchor = Offset(0.5f, 0.5f),
+                        // The selected marker draws on top of its neighbours.
+                        zIndex = if (isSelected) 1f else 0f,
                         onClick = {
                             onMarkerClick(place.id)
                             true // handled: don't also show the default info window
                         }
                     ) {
-                        MapBadge(item)
+                        MapBadge(item, isSelected)
                     }
                 }
             }
@@ -113,17 +141,22 @@ internal fun PlacesMap(
     }
 }
 
-/** The place's marker on a ring in the surface colour, so it stands out from any map background. */
+/**
+ * The place's marker on a ring, so it stands out from any map background. The selected one is
+ * larger with a primary-coloured ring.
+ */
 @Composable
-private fun MapBadge(item: HomePlace) {
+private fun MapBadge(item: HomePlace, isSelected: Boolean) {
+    val ringColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
+    val badgeSize = if (isSelected) 52.dp else 40.dp
     Box(
         modifier = Modifier
-            .size(46.dp)
-            .background(MaterialTheme.colorScheme.surface, CircleShape)
+            .size(badgeSize + 6.dp)
+            .background(ringColor, CircleShape)
             .padding(3.dp),
         contentAlignment = Alignment.Center
     ) {
-        PlaceMarker(item.place.markerStyle, item.collection, size = 40.dp)
+        PlaceMarker(item.place.markerStyle, item.collection, size = badgeSize)
     }
 }
 
@@ -144,6 +177,21 @@ private fun EmptyMapHint(modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+/**
+ * Animates to [update]. If something other than the user's finger interrupts the animation (for
+ * example the keyboard closing as a search result is picked), jumps there instead, so the camera
+ * never stops halfway. A user dragging the map is left alone.
+ */
+private suspend fun CameraPositionState.animateOrJump(update: CameraUpdate) {
+    try {
+        animate(update)
+    } catch (e: CancellationException) {
+        // Our own coroutine was cancelled (e.g. a newer selection): stop here.
+        currentCoroutineContext().ensureActive()
+        if (cameraMoveStartedReason != CameraMoveStartedReason.GESTURE) move(update)
     }
 }
 

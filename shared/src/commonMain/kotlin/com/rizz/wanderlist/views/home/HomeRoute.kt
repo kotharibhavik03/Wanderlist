@@ -1,6 +1,5 @@
 package com.rizz.wanderlist.views.home
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +24,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -33,20 +34,31 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextAlign
@@ -54,13 +66,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import com.rizz.wanderlist.util.formatCoordinates
 import com.rizz.wanderlist.util.pluralize
 import com.rizz.wanderlist.views.place.PlaceMarker
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
 /** Space at the bottom of the map kept clear for the add button, so framing doesn't hide markers under it. */
 private val AddButtonClearance = 88.dp
+
+/** Height of Material's default sheet drag handle: a 4dp bar with 22dp above and below. */
+private val SheetDragHandleHeight = 48.dp
 
 @Composable
 fun HomeRoute(
@@ -85,8 +105,10 @@ fun HomeRoute(
 
 /**
  * The map fills the screen, behind the status bar. The app name, search and filters float on top of it,
- * as in Google Maps; search results open in a panel over the map.
+ * as in Google Maps; search results open in a panel over the map. Tapping a marker (or a search
+ * result) selects the place and opens a non-modal bottom sheet: the map stays usable behind it.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     uiState: HomeUiState,
@@ -99,59 +121,130 @@ fun HomeScreen(
     onSharedToggled: () -> Unit
 ) {
     val density = LocalDensity.current
+    val focusManager = LocalFocusManager.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
     // Height of the floating controls, measured from the top of the screen. The map keeps its
     // framing and Google's logo clear of them, and search results open just below them.
     var controlsHeight by remember { mutableStateOf(0.dp) }
+    // Height of the sheet's summary; the sheet peeks exactly that far (plus its handle and the bar).
+    var summaryHeight by remember { mutableStateOf(0.dp) }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+    var selectedPlaceId by rememberSaveable { mutableStateOf<String?>(null) }
+    val selected = uiState.places.firstOrNull { it.place.id == selectedPlaceId }
+    // Keeps showing the last place while the sheet slides away, instead of collapsing empty.
+    var sheetPlace by remember { mutableStateOf<HomePlace?>(null) }
+    SideEffect { if (selected != null) sheetPlace = selected }
+    // A selected place that disappears (filtered out, deleted, unshared) closes the sheet.
+    LaunchedEffect(uiState.isLoading, selected == null) {
+        if (!uiState.isLoading && selected == null) selectedPlaceId = null
+    }
+
+    // Starts hidden; Hidden must be an allowed state, so swiping down can close the sheet.
+    val sheetState = rememberBottomSheetState(
+        SheetValue.Hidden,
+        setOf(SheetValue.Hidden, SheetValue.PartiallyExpanded, SheetValue.Expanded)
+    )
+    val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
+    // Selection drives the sheet...
+    LaunchedEffect(selectedPlaceId) {
+        if (selectedPlaceId != null) sheetState.partialExpand() else sheetState.hide()
+    }
+    // ...and swiping the sheet away clears the selection. drop(1) skips the initial Hidden, so a
+    // selection restored after rotation isn't cleared before the sheet reopens.
+    LaunchedEffect(sheetState) {
+        snapshotFlow { sheetState.targetValue }
+            .drop(1)
+            .collect { if (it == SheetValue.Hidden) selectedPlaceId = null }
+    }
+
+    // Back closes the sheet first, as in Google Maps, instead of leaving Home.
+    NavigationBackHandler(
+        state = rememberNavigationEventState(NavigationEventInfo.None),
+        isBackEnabled = selected != null,
+        onBackCompleted = { selectedPlaceId = null }
+    )
+
+    val peekHeight = SheetDragHandleHeight + summaryHeight + bottomBarPadding
+    val mapBottomPadding = if (selected != null) peekHeight else bottomBarPadding + AddButtonClearance
+
+    BottomSheetScaffold(
+        scaffoldState = scaffoldState,
+        sheetPeekHeight = peekHeight,
+        snackbarHost = { SnackbarHost(snackbarHostState, Modifier.padding(bottom = bottomBarPadding)) },
+        sheetContent = {
+            sheetPlace?.let { shown ->
+                PlaceSheetContent(
+                    item = shown,
+                    bottomPadding = bottomBarPadding,
+                    onSummaryHeightChanged = { summaryHeight = it },
+                    onOpenDetails = { onPlaceClick(shown.place.id) },
+                    onDirectionsError = { message -> scope.launch { snackbarHostState.showSnackbar(message) } }
+                )
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) {
-        PlacesMap(
-            places = uiState.places,
-            onMarkerClick = onPlaceClick,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = controlsHeight, bottom = bottomBarPadding + AddButtonClearance)
-        )
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                // Measured before the status-bar padding, so it includes it.
-                .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } }
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(top = 8.dp, bottom = 8.dp)
-        ) {
-            TopCard(
-                query = uiState.query,
-                placeCount = uiState.places.size,
-                isFiltered = !uiState.showingAll,
-                onQueryChange = onQueryChange
+        Box(modifier = Modifier.fillMaxSize()) {
+            PlacesMap(
+                places = uiState.places,
+                selectedPlaceId = selectedPlaceId,
+                onMarkerClick = { id -> selectedPlaceId = id },
+                onMapClick = {
+                    focusManager.clearFocus()
+                    selectedPlaceId = null
+                },
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = controlsHeight, bottom = mapBottomPadding)
             )
-            FilterChips(uiState, onAllSelected, onCollectionToggled, onSharedToggled)
-        }
 
-        if (uiState.isSearching) {
-            SearchResults(
-                uiState = uiState,
-                onPlaceClick = onPlaceClick,
-                topOffset = controlsHeight,
-                bottomOffset = bottomBarPadding
-            )
-        }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // Measured before the status-bar padding, so it includes it.
+                    .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } }
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .padding(top = 8.dp, bottom = 8.dp)
+            ) {
+                TopCard(
+                    query = uiState.query,
+                    placeCount = uiState.places.size,
+                    isFiltered = !uiState.showingAll,
+                    onQueryChange = onQueryChange
+                )
+                FilterChips(uiState, onAllSelected, onCollectionToggled, onSharedToggled)
+            }
 
-        FloatingActionButton(
-            onClick = onAddClick,
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            shape = CircleShape,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(bottom = bottomBarPadding)
-                .padding(16.dp)
-        ) {
-            Icon(Icons.Default.Add, contentDescription = "Add a place")
+            if (uiState.isSearching) {
+                SearchResults(
+                    uiState = uiState,
+                    // Like Google Maps: a result is shown on the map, with its sheet.
+                    onPlaceClick = { id ->
+                        focusManager.clearFocus()
+                        onQueryChange("")
+                        selectedPlaceId = id
+                    },
+                    topOffset = controlsHeight,
+                    bottomOffset = bottomBarPadding
+                )
+            }
+
+            // The sheet takes the bottom of the screen while a place is selected.
+            if (selected == null) {
+                FloatingActionButton(
+                    onClick = onAddClick,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    shape = CircleShape,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(bottom = bottomBarPadding)
+                        .padding(16.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add a place")
+                }
+            }
         }
     }
 }
