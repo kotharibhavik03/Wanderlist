@@ -1,5 +1,6 @@
 package com.rizz.wanderlist.views.auth
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -61,7 +62,8 @@ fun SignInScreen(
                 CircularProgressIndicator()
             } else {
                 GoogleSignInButton(
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                    // A minimum, not a fixed height: a large font makes the label taller.
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                 ) {
                     onGoogleClick()
                 }

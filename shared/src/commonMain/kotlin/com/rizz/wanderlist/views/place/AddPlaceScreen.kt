@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -316,7 +317,8 @@ private fun DetailsSection(
             OutlinedButton(onClick = onPickDate, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.CalendarMonth, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text(uiState.visitedOnMillis?.let(::formatDate) ?: "Add visit date")
+                // "Visited on …", not just a date: says what the date is, also to screen readers.
+                Text(uiState.visitedOnMillis?.let { "Visited on ${formatDate(it)}" } ?: "Add visit date")
             }
             RatingRow(uiState.rating, actions.onRatingChange)
         }
@@ -337,7 +339,11 @@ private fun RatingRow(rating: Int?, onChange: (Int?) -> Unit) {
         Text("Rating", modifier = Modifier.padding(end = 8.dp))
         (1..5).forEach { star ->
             val filled = rating != null && star <= rating
-            IconButton(onClick = { onChange(if (rating == star) null else star) }) {
+            // Screen readers hear which rating is chosen: "Selected, 4 stars".
+            IconButton(
+                onClick = { onChange(if (rating == star) null else star) },
+                modifier = Modifier.semantics { selected = rating == star }
+            ) {
                 Icon(
                     imageVector = if (filled) Icons.Default.Star else Icons.Default.StarBorder,
                     contentDescription = if (star == 1) "1 star" else "$star stars",
@@ -589,7 +595,8 @@ private fun SaveSection(uiState: AddPlaceUiState, onSave: () -> Unit) {
         Button(
             onClick = onSave,
             enabled = uiState.canSave,
-            modifier = Modifier.fillMaxWidth().height(54.dp)
+            // A minimum, not a fixed height: a large font makes the label taller.
+            modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)
         ) {
             if (uiState.isSaving) {
                 CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)

@@ -595,21 +595,25 @@ private fun SearchResults(
                         headlineContent = {
                             Text(place.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         },
+                        // The collection on its own line, not beside the address: there it took
+                        // the address's room, and with a large font left only "Manali, Hi…".
                         supportingContent = {
-                            Text(
-                                place.address ?: formatCoordinates(place.latitude, place.longitude),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Column {
+                                Text(
+                                    place.address ?: formatCoordinates(place.latitude, place.longitude),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    item.collection?.name ?: "Shared with you",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         },
                         leadingContent = { PlaceMarker(place.markerStyle, item.collection, place.markerPhotoUrl) },
-                        trailingContent = {
-                            Text(
-                                item.collection?.name ?: "Shared",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         modifier = Modifier.clickable { onPlaceClick(place.id) }
                     )

@@ -27,9 +27,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rizz.wanderlist.domain.model.PlacePhoto
@@ -113,17 +115,16 @@ internal fun PlaceSheetContent(
                     )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            SideBySideOrStacked {
                 DirectionsButton(
                     latitude = place.latitude,
                     longitude = place.longitude,
-                    onError = onDirectionsError,
-                    modifier = Modifier.weight(1f)
+                    onError = onDirectionsError
                 )
-                OutlinedButton(onClick = onOpenDetails, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = onOpenDetails) {
                     Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Details")
+                    Text("Details", maxLines = 1, softWrap = false)
                 }
             }
         }
@@ -204,17 +205,16 @@ internal fun LocationSheetContent(
                     )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            SideBySideOrStacked {
                 DirectionsButton(
                     latitude = location.latitude,
                     longitude = location.longitude,
-                    onError = onDirectionsError,
-                    modifier = Modifier.weight(1f)
+                    onError = onDirectionsError
                 )
-                FilledTonalButton(onClick = onSave, modifier = Modifier.weight(1f)) {
+                FilledTonalButton(onClick = onSave) {
                     Icon(Icons.Default.BookmarkAdd, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Save this place")
+                    Text("Save this place", maxLines = 1, softWrap = false)
                 }
             }
         }
@@ -245,6 +245,41 @@ internal fun LocationSheetContent(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+}
+
+/**
+ * Buttons in a row of equal widths when every label fits, else stacked at full width. With a
+ * large font, half the sheet can't hold "Directions" or "Save this place", and a label must
+ * never break mid-word. Decided by measuring the buttons, so it works at any font size or width.
+ */
+@Composable
+private fun SideBySideOrStacked(content: @Composable () -> Unit) {
+    Layout(content) { measurables, constraints ->
+        val gap = 12.dp.roundToPx()
+        val count = measurables.size
+        val width = constraints.maxWidth
+        val share = (width - gap * (count - 1)) / count
+        val fits = measurables.all { it.maxIntrinsicWidth(Constraints.Infinity) <= share }
+        val itemWidth = if (fits) share else width
+        val placeables = measurables.map { it.measure(Constraints.fixedWidth(itemWidth)) }
+        if (fits) {
+            val height = placeables.maxOf { it.height }
+            layout(width, height) {
+                placeables.forEachIndexed { index, placeable ->
+                    placeable.placeRelative(index * (share + gap), (height - placeable.height) / 2)
+                }
+            }
+        } else {
+            val height = placeables.sumOf { it.height } + gap * (count - 1)
+            layout(width, height) {
+                var y = 0
+                placeables.forEach { placeable ->
+                    placeable.placeRelative(0, y)
+                    y += placeable.height + gap
+                }
+            }
         }
     }
 }

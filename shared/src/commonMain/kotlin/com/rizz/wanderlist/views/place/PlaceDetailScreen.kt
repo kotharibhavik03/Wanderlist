@@ -364,7 +364,8 @@ internal fun DirectionsButton(
         ) {
             Icon(Icons.Default.Directions, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text("Directions")
+            // Never broken mid-word ("Direction / s"); where it's tight, buttons stack instead.
+            Text("Directions", maxLines = 1, softWrap = false)
         }
         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
             directionsApps.forEach { app ->
@@ -425,7 +426,11 @@ internal fun DetailsCard(place: Place, collection: PlaceCollection?) {
 
 @Composable
 private fun DetailRow(icon: ImageVector, label: String, content: @Composable ColumnScope.() -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+    // One stop for screen readers: "Visited on, 24 Oct 2026", not the label and value separately.
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        modifier = Modifier.semantics(mergeDescendants = true) { }
+    ) {
         Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
@@ -542,9 +547,11 @@ private fun PersonRow(person: PlacePerson) {
         else -> null
     }
 
+    // One stop for screen readers: name, email and role together.
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.semantics(mergeDescendants = true) { }
     ) {
         UserAvatar(name = person.name, email = person.email, photoUrl = person.photoUrl, size = 40.dp)
         Column(modifier = Modifier.weight(1f)) {
@@ -555,11 +562,12 @@ private fun PersonRow(person: PlacePerson) {
                 overflow = TextOverflow.Ellipsis
             )
             secondary?.let {
+                // Two lines: with a large font a long email would otherwise lose its domain.
                 Text(
                     it,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }

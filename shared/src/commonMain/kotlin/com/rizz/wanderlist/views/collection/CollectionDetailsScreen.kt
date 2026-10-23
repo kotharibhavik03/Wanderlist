@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -55,6 +56,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -291,14 +294,20 @@ private fun PlacesTab(
     }
 }
 
+/** A place card's details: visit date, rating (written by [rating]), photos and people. */
+private fun metaOf(place: Place, rating: (Int) -> String): List<String> = buildList {
+    place.visitedOnEpochMillis?.let { add(formatDate(it)) }
+    place.rating?.let { add(rating(it)) }
+    if (place.photos.isNotEmpty()) add(pluralize(place.photos.size, "photo"))
+    if (place.members.isNotEmpty()) add(pluralize(place.members.size, "person", "people"))
+}
+
 @Composable
 private fun PlaceCard(place: Place, collection: PlaceCollection, onClick: () -> Unit) {
-    val meta = buildList {
-        place.visitedOnEpochMillis?.let { add(formatDate(it)) }
-        place.rating?.let { add("★ $it") }
-        if (place.photos.isNotEmpty()) add(pluralize(place.photos.size, "photo"))
-        if (place.members.isNotEmpty()) add(pluralize(place.members.size, "person", "people"))
-    }.joinToString(" · ")
+    // Shown with a star; read aloud as words ("black star 4" means nothing). When the line wraps,
+    // it wraps between items: non-breaking spaces keep "2 photos" and "24 Oct 2026" whole.
+    val meta = metaOf(place, rating = { "★ $it" }).joinToString(" · ") { it.replace(' ', '\u00A0') }
+    val spokenMeta = metaOf(place, rating = { "rated $it out of 5" }).joinToString(", ")
 
     OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -321,10 +330,13 @@ private fun PlaceCard(place: Place, collection: PlaceCollection, onClick: () -> 
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Row(
+                // The details go next to the status badge, or below it when they don't fit
+                // there (a large font), instead of being cut off.
+                FlowRow(
                     modifier = Modifier.padding(top = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    itemVerticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     PlaceStatusBadge(place.status)
                     if (meta.isNotEmpty()) {
@@ -332,8 +344,10 @@ private fun PlaceCard(place: Place, collection: PlaceCollection, onClick: () -> 
                             meta,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            // Replaces what's read for this line, so only the spoken version is heard.
+                            modifier = Modifier.clearAndSetSemantics { contentDescription = spokenMeta }
                         )
                     }
                 }

@@ -141,6 +141,8 @@ internal fun PlacesMap(
                         place.markerStyle, item.collection?.icon.orEmpty(), item.collection?.colors.orEmpty(), isSelected, photo != null,
                         state = rememberUpdatedMarkerState(LatLng(place.latitude, place.longitude)),
                         title = place.displayName,
+                        // What screen readers announce for the marker (it's otherwise an unnamed button).
+                        contentDescription = place.displayName,
                         // Centred on the spot: the badge is a circle, not a pin with a point.
                         anchor = Offset(0.5f, 0.5f),
                         // The selected marker draws on top of its neighbours.
@@ -161,6 +163,7 @@ internal fun PlacesMap(
                     Marker(
                         state = rememberUpdatedMarkerState(LatLng(location.latitude, location.longitude)),
                         title = location.actualName,
+                        contentDescription = location.actualName,
                         zIndex = 2f,
                         onClick = { true } // its sheet is already open
                     )

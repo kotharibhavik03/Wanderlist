@@ -12,6 +12,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,14 +44,17 @@ internal fun collectionBrush(colors: List<Long>, fallback: Color): Brush {
     }
 }
 
-/** The circular map marker: an emoji on the collection's colours. */
+/**
+ * The circular map marker: an emoji on the collection's colours. Decorative: screen readers
+ * skip the emoji ("snow-capped mountain"), because a name is always shown next to it.
+ */
 @Composable
 internal fun MarkerBadge(emoji: String, brush: Brush, size: Dp = 44.dp) {
     Box(
         modifier = Modifier.size(size).clip(CircleShape).background(brush),
         contentAlignment = Alignment.Center
     ) {
-        Text(text = emoji, fontSize = (size.value * 0.5f).sp)
+        Text(text = emoji, fontSize = (size.value * 0.5f).sp, modifier = Modifier.clearAndSetSemantics { })
     }
 }
 
