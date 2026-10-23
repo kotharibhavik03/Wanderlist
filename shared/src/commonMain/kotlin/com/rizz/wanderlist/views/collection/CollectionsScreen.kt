@@ -25,7 +25,6 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -60,7 +59,6 @@ fun CollectionsRoute(
     onAddClick: () -> Unit,
     onCollectionClick: (collectionId: String) -> Unit,
     onSharedPlaceClick: (placeId: String) -> Unit,
-    onSignOutClick: () -> Unit,
     viewModel: CollectionsViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -68,8 +66,7 @@ fun CollectionsRoute(
         uiState = uiState,
         onAddClick = onAddClick,
         onCollectionClick = onCollectionClick,
-        onSharedPlaceClick = onSharedPlaceClick,
-        onSignOutClick = onSignOutClick
+        onSharedPlaceClick = onSharedPlaceClick
     )
 }
 
@@ -80,16 +77,12 @@ fun CollectionsScreen(
     onAddClick: () -> Unit,
     onCollectionClick: (collectionId: String) -> Unit,
     onSharedPlaceClick: (placeId: String) -> Unit,
-    onSignOutClick: () -> Unit,
 ) {
     var segment by rememberSaveable { mutableStateOf(CollectionsSegment.MINE) }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Wanderlist") },
-                actions = { TextButton(onClick = onSignOutClick) { Text("Sign out") } }
-            )
+            TopAppBar(title = { Text("Collections") })
         },
         floatingActionButton = {
             // You can only create collections of your own.

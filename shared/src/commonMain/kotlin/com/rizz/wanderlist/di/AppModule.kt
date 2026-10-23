@@ -18,6 +18,7 @@ import com.rizz.wanderlist.views.collection.CollectionsViewModel
 import com.rizz.wanderlist.views.collection.CreateCollectionViewModel
 import com.rizz.wanderlist.views.place.AddPlaceViewModel
 import com.rizz.wanderlist.views.place.PlaceDetailViewModel
+import com.rizz.wanderlist.views.profile.ProfileViewModel
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
@@ -31,6 +32,7 @@ val appModule = module {
 
     single<AuthRepository> { KmpAuthRepository() }
     viewModel { AuthViewModel(get()) }
+    viewModel { ProfileViewModel(get()) }
     viewModel { SignInViewModel() }
 
     viewModel { AddPlaceViewModel(get(), get(), get(), get(), get()) }

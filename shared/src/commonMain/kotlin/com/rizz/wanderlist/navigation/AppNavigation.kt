@@ -1,7 +1,6 @@
 
 package com.rizz.wanderlist.navigation
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -18,7 +17,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
@@ -35,6 +33,7 @@ import com.rizz.wanderlist.views.place.AddPlaceRoute
 import com.rizz.wanderlist.views.place.AddPlaceViewModel
 import com.rizz.wanderlist.views.place.MapPickerRoute
 import com.rizz.wanderlist.views.place.PlaceDetailRoute
+import com.rizz.wanderlist.views.profile.ProfileRoute
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import org.koin.compose.viewmodel.koinViewModel
@@ -181,11 +180,7 @@ fun AppNavigation(onSignOut: () -> Unit) {
                     CollectionsRoute(
                         onAddClick = { backStack.add(Route.CreateCollection) },
                         onCollectionClick = { id -> backStack.add(Route.CollectionDetail(id)) },
-                        onSharedPlaceClick = { id -> backStack.add(Route.PlaceDetail(id)) },
-                        onSignOutClick = {
-                            addPlaceViewModel.clearDraft()
-                            onSignOut()
-                        }
+                        onSharedPlaceClick = { id -> backStack.add(Route.PlaceDetail(id)) }
                     )
                 }
 
@@ -200,12 +195,12 @@ fun AppNavigation(onSignOut: () -> Unit) {
                     )
                 }
                 entry<Route.Profile> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Profile — coming next")
-                    }
+                    ProfileRoute(
+                        onSignOut = {
+                            addPlaceViewModel.clearDraft()
+                            onSignOut()
+                        }
+                    )
                 }
 
                 entry<Route.AddPlace> {

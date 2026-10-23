@@ -54,6 +54,8 @@ Kotlin Multiplatform + Compose Multiplatform travel app (Android + iOS from one 
 - "Shared with me" is a segment on the Collections tab.
 - Place detail (`Route.PlaceDetail(placeId)`, `PlaceDetailRoute/Screen/ViewModel`), opened from collection-page place cards and Shared-with-me cards. Read-only: header (marker, name, "Listed as", status and shared-role pills), Directions, details card (location, visit date, rating, collection for owner only, notes), photos row, people. `PlaceAccess` + `Place.accessFor(user)` in domain. `PlaceRepository.observePlace(id)` returns null unless owner or member; in-memory repo now hides other people's private photos (`visibleTo`). Directions: `util/Directions.kt` with `expect val directionsApps` (Android: Google Maps; iOS: Apple Maps, Google Maps) opened via `LocalUriHandler` https links.
 - Edit place + Leave place. Edit (owner, collaborator) reuses the Add Place form via `Route.EditPlace(placeId)`; `AddPlaceUiState.mode: DraftMode` (New / Loading / Editing(access) / Unavailable); `startEditing(placeId)` is idempotent so returning from the map picker keeps changes. Collaborators don't see Collection or People; edit mode hides Photos. Leave (collaborator, visited-with) on Place detail with a confirm dialog removes the member and their photos. Domain: `PlaceDetails` (editable fields; `NewPlace` = details + photos), shared `validatePlaceDetails`, `UpdatePlaceUseCase`, `PlaceRepository.updatePlace/leavePlace` enforce the access rules. `util/resultOf` = runCatching that rethrows `CancellationException`.
+- Delete (owner only). Place detail shows "Delete place" for the owner and "Leave place" for members (shared `RemoveAction` dialog; event `PlaceDetailEvent.PlaceRemoved`). Collection page has a ⋮ menu with "Delete collection"; `DeleteCollectionUseCase` deletes the owner's places in it first (`PlaceRepository.deletePlacesInCollection`), then the collection (`CollectionRepository.deleteCollection`). Confirmation names the place count. Moving a place between collections is done via Edit (owner).
+- Profile tab (`views/profile`: `ProfileRoute/Screen`, `ProfileViewModel` from `AuthRepository.currentUser`): initials avatar (Google photo comes with Coil in the Photos step), name, email, "Signed in with Google", Sign out (via `AppNavigation`'s `onSignOut`, which clears the draft). Sign out removed from the Collections top bar, now titled "Collections".
 
 ## Status
 
@@ -71,12 +73,10 @@ Kotlin Multiplatform + Compose Multiplatform travel app (Android + iOS from one 
 - "Shared with me": segmented control (My collections | Shared with me) on the Collections tab; FAB only on My collections. `PlaceRepository.observeSharedWithMe()` returns `SharedPlace(place, myRole)` for places someone else owns where my lowercase email is a member. `InMemoryPlaceRepository` now takes `AuthRepository` and stamps the real signed-in user as `ownerId` / photo `uploaderId`.
 
 ### Compiles on both targets, runtime NOT yet confirmed
-- Delete (owner only). Place detail shows "Delete place" for the owner and "Leave place" for members (shared `RemoveAction` dialog; event `PlaceDetailEvent.PlaceRemoved`). Collection page has a ⋮ menu with "Delete collection"; `DeleteCollectionUseCase` deletes the owner's places in it first (`PlaceRepository.deletePlacesInCollection`), then the collection (`CollectionRepository.deleteCollection`). Confirmation names the place count. Moving a place between collections is done via Edit (owner).
-- Check: delete a place from its detail page → back on the collection page with the count down; delete a collection with places → back on Collections, collection gone; a member sees Leave, never Delete.
+- (nothing)
 
 ### Pending, in order
 1. **UI-4**, remaining steps in order:
-   - Profile (avatar, name, email, sign out; move Sign out off the Collections top bar).
    - Home map extras (marker bottom sheet, collection filter chips, my-location button, `HomeViewModel`).
    - Full-screen photo viewer moves to the Photos step (nothing to view until the picker works).
 2. **Theme polish.** Typography, Shapes, semantic colours (Visited / Wishlist), status-bar style.
@@ -85,7 +85,7 @@ Kotlin Multiplatform + Compose Multiplatform travel app (Android + iOS from one 
    - Google Maps: expect/actual wrapper (Maps Compose on Android, native SDK on iOS), custom markers, real Map Picker with pin-drop and free geocoders. API key stays out of Git.
    - Photos: picker (expect/actual), compression, Coil 3, Firebase Storage behind `PhotoStorage`. Replace local-uri photo ids with real ids and map `MarkerStyle.Photo` on upload. Add/remove your own photos on an existing place (edit mode currently hides Photos), and make the edit-mode marker chooser list the place's existing shared photos. When the owner removes a member, remove that member's photos too (needs member email → user id).
    - Collaboration: `users` collection with email lookup, invites for unregistered emails resolved on first sign-in, leave-place, visibility rules.
-   - Change profile photo, then CI, README and polish. (Directions already done via https links.)
+   - Show the Google profile photo (Coil) instead of initials, change profile photo, then CI, README and polish. (Directions already done via https links.)
 
 ### Known gaps and cleanup to fold into upcoming steps
 - Save on Add Place only works via the manual location form; the real map comes later.
