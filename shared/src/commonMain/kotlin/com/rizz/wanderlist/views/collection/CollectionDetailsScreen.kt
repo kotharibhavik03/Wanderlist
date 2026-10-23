@@ -21,9 +21,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -32,12 +37,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -66,12 +78,30 @@ fun CollectionDetailRoute(
     collectionId: String,
     onBack: () -> Unit,
     onPlaceClick: (placeId: String) -> Unit,
-    onAddPlace: () -> Unit
+    onAddPlace: () -> Unit,
+    onDeleted: () -> Unit
 ) {
     val viewModel: CollectionDetailViewModel =
         koinViewModel(parameters = { parametersOf(collectionId) })
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    CollectionDetailScreen(uiState, onBack, onPlaceClick, onAddPlace)
+    val currentOnDeleted by rememberUpdatedState(onDeleted)
+
+    LaunchedEffect(viewModel) {
+        viewModel.events.collect { event ->
+            when (event) {
+                CollectionDetailEvent.Deleted -> currentOnDeleted()
+            }
+        }
+    }
+
+    CollectionDetailScreen(
+        uiState = uiState,
+        onBack = onBack,
+        onPlaceClick = onPlaceClick,
+        onAddPlace = onAddPlace,
+        onDeleteConfirmed = viewModel::onDeleteConfirmed,
+        onErrorShown = viewModel::onErrorShown
+    )
 }
 
 @Composable
@@ -79,13 +109,26 @@ fun CollectionDetailScreen(
     uiState: CollectionDetailUiState,
     onBack: () -> Unit,
     onPlaceClick: (placeId: String) -> Unit,
-    onAddPlace: () -> Unit
+    onAddPlace: () -> Unit,
+    onDeleteConfirmed: () -> Unit,
+    onErrorShown: () -> Unit
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    var showMenu by rememberSaveable { mutableStateOf(false) }
+    var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
     val collection = uiState.collection
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            onErrorShown()
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(collection?.name ?: "Collection") },
@@ -93,11 +136,36 @@ fun CollectionDetailScreen(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
+                },
+                actions = {
+                    if (collection != null) {
+                        Box {
+                            IconButton(onClick = { showMenu = true }, enabled = !uiState.isDeleting) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                            }
+                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Delete collection", color = MaterialTheme.colorScheme.error) },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        showDeleteDialog = true
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             )
         },
         floatingActionButton = {
-            if (collection != null) {
+            if (collection != null && !uiState.isDeleting) {
                 ExtendedFloatingActionButton(
                     onClick = onAddPlace,
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -107,7 +175,7 @@ fun CollectionDetailScreen(
         }
     ) { padding ->
         when {
-            uiState.isLoading -> Centered(padding) { CircularProgressIndicator() }
+            uiState.isLoading || uiState.isDeleting -> Centered(padding) { CircularProgressIndicator() }
             collection == null -> Centered(padding) { Text("This collection no longer exists.") }
             else -> Column(modifier = Modifier.fillMaxSize().padding(padding)) {
                 Header(collection, uiState.places.size, uiState.photos.size)
@@ -130,6 +198,33 @@ fun CollectionDetailScreen(
                 }
             }
         }
+    }
+
+    if (showDeleteDialog && collection != null) {
+        val placeCount = uiState.places.size
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = {
+                Text(
+                    if (placeCount == 0) "Delete \"${collection.name}\"?"
+                    else "Delete \"${collection.name}\" and its ${pluralize(placeCount, "place")}?"
+                )
+            },
+            text = {
+                Text(
+                    if (placeCount == 0) "This can't be undone."
+                    else "Its places and their photos will be deleted too, and anyone they were shared " +
+                            "with will lose access. This can't be undone."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteDialog = false
+                    onDeleteConfirmed()
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") } }
+        )
     }
 }
 

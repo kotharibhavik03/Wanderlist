@@ -1,7 +1,5 @@
 package com.rizz.wanderlist.views.place
 
-import kotlinx.coroutines.launch
-
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rizz.wanderlist.domain.model.CollectionSummary
@@ -9,11 +7,18 @@ import com.rizz.wanderlist.domain.model.MarkerStyle
 import com.rizz.wanderlist.domain.model.MemberRole
 import com.rizz.wanderlist.domain.model.NewPlace
 import com.rizz.wanderlist.domain.model.NewPlacePhoto
+import com.rizz.wanderlist.domain.model.Place
+import com.rizz.wanderlist.domain.model.PlaceAccess
+import com.rizz.wanderlist.domain.model.PlaceDetails
 import com.rizz.wanderlist.domain.model.PlaceMember
 import com.rizz.wanderlist.domain.model.PlaceStatus
 import com.rizz.wanderlist.domain.model.SelectedLocation
+import com.rizz.wanderlist.domain.model.accessFor
+import com.rizz.wanderlist.domain.repository.AuthRepository
+import com.rizz.wanderlist.domain.repository.PlaceRepository
 import com.rizz.wanderlist.domain.usecase.ObserveCollectionSummariesUseCase
 import com.rizz.wanderlist.domain.usecase.SavePlaceUseCase
+import com.rizz.wanderlist.domain.usecase.UpdatePlaceUseCase
 import com.rizz.wanderlist.util.isValidEmail
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -21,18 +26,35 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 /** A photo picked but not uploaded yet. The uri doubles as its id inside the draft. */
 data class DraftPhoto(val uri: String, val isPrivate: Boolean = false)
 
+/** Whether the form is adding a new place or editing an existing one. */
+sealed interface DraftMode {
+    data object New : DraftMode
+
+    /** Fetching the place to edit. */
+    data class Loading(val placeId: String) : DraftMode
+
+    data class Editing(val placeId: String, val access: PlaceAccess) : DraftMode
+
+    /** Deleted, or the user isn't allowed to edit it. */
+    data class Unavailable(val placeId: String) : DraftMode
+}
+
 sealed interface AddPlaceEvent {
+    /** Saved, new or edited. Carries the place's collection so a new place can be shown in it. */
     data class Saved(val collectionId: String) : AddPlaceEvent
 }
 
 data class AddPlaceUiState(
+    val mode: DraftMode = DraftMode.New,
     val searchQuery: String = "",
     val selectedLocation: SelectedLocation? = null,
     val customName: String = "",
@@ -47,17 +69,27 @@ data class AddPlaceUiState(
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
 ) {
+    val isEditing: Boolean get() = mode != DraftMode.New
+
+    /** Only the owner moves a place to another collection or changes its people. */
+    val canManageCollectionAndPeople: Boolean
+        get() = mode == DraftMode.New || (mode is DraftMode.Editing && mode.access == PlaceAccess.OWNER)
+
     val canSave: Boolean
-        get() = selectedLocation != null && selectedCollectionId != null && !isSaving
+        get() = (mode == DraftMode.New || mode is DraftMode.Editing) &&
+                selectedLocation != null && selectedCollectionId != null && !isSaving
 }
 
 /**
- * Holds the add-place draft. It is shared between the Add Place and Map Picker
- * screens, so AppNavigation owns it and clears it when the flow ends.
+ * Holds the add/edit-place draft. It is shared between the form and the Map Picker,
+ * so AppNavigation owns it and clears it when the flow ends.
  */
 class AddPlaceViewModel(
     observeCollectionSummaries: ObserveCollectionSummariesUseCase,
-    private val savePlace: SavePlaceUseCase
+    private val savePlace: SavePlaceUseCase,
+    private val updatePlace: UpdatePlaceUseCase,
+    private val placeRepository: PlaceRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddPlaceUiState())
@@ -69,6 +101,50 @@ class AddPlaceViewModel(
     val collections: StateFlow<List<CollectionSummary>> =
         observeCollectionSummaries()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Fills the draft from an existing place. Safe to call again for the same place. */
+    fun startEditing(placeId: String) {
+        val mode = _uiState.value.mode
+        // Returning from the map picker calls this again; keep the unsaved changes.
+        val alreadyThisPlace = (mode is DraftMode.Loading && mode.placeId == placeId) ||
+                (mode is DraftMode.Editing && mode.placeId == placeId) ||
+                (mode is DraftMode.Unavailable && mode.placeId == placeId)
+        if (alreadyThisPlace) return
+
+        _uiState.value = AddPlaceUiState(mode = DraftMode.Loading(placeId))
+        viewModelScope.launch {
+            val user = authRepository.currentUser.first()
+            val place = placeRepository.observePlace(placeId).first()
+            val access = if (user != null && place != null) place.accessFor(user) else null
+
+            _uiState.update { state ->
+                // The draft was cleared or reused while loading; don't overwrite it.
+                if (state.mode != DraftMode.Loading(placeId)) return@update state
+
+                if (place == null || (access != PlaceAccess.OWNER && access != PlaceAccess.COLLABORATOR)) {
+                    state.copy(mode = DraftMode.Unavailable(placeId))
+                } else {
+                    state.copy(
+                        mode = DraftMode.Editing(placeId, access),
+                        selectedLocation = SelectedLocation(
+                            latitude = place.latitude,
+                            longitude = place.longitude,
+                            actualName = place.actualName,
+                            address = place.address
+                        ),
+                        customName = place.customName,
+                        notes = place.notes,
+                        status = place.status,
+                        visitedOnMillis = place.visitedOnEpochMillis,
+                        rating = place.rating,
+                        selectedCollectionId = place.collectionId,
+                        markerStyle = place.markerStyle,
+                        members = place.members
+                    )
+                }
+            }
+        }
+    }
 
     fun onSearchQueryChange(query: String) = _uiState.update { it.copy(searchQuery = query) }
 
@@ -153,33 +229,42 @@ class AddPlaceViewModel(
 
     fun onSaveClicked() {
         val state = _uiState.value
+        if (!state.canSave) return // also ignores double taps while saving
         val location = state.selectedLocation ?: return
         val collectionId = state.selectedCollectionId ?: return
-        if (state.isSaving) return // ignore double taps
+        val mode = state.mode
+
+        val details = PlaceDetails(
+            collectionId = collectionId,
+            actualName = location.actualName,
+            customName = state.customName.trim(),
+            address = location.address,
+            latitude = location.latitude,
+            longitude = location.longitude,
+            status = state.status,
+            visitedOnEpochMillis = state.visitedOnMillis,
+            rating = state.rating,
+            notes = state.notes.trim(),
+            markerStyle = state.markerStyle,
+            members = state.members
+        )
+
+        val save: suspend () -> Result<Place> = when (mode) {
+            DraftMode.New -> {
+                { savePlace(NewPlace(details, state.photos.map { NewPlacePhoto(it.uri, it.isPrivate) })) }
+            }
+            is DraftMode.Editing -> {
+                { updatePlace(mode.placeId, details) }
+            }
+            is DraftMode.Loading, is DraftMode.Unavailable -> return
+        }
 
         _uiState.update { it.copy(isSaving = true, errorMessage = null) }
         viewModelScope.launch {
-            val result = savePlace(
-                NewPlace(
-                    collectionId = collectionId,
-                    actualName = location.actualName,
-                    customName = state.customName.trim(),
-                    address = location.address,
-                    latitude = location.latitude,
-                    longitude = location.longitude,
-                    status = state.status,
-                    visitedOnEpochMillis = state.visitedOnMillis,
-                    rating = state.rating,
-                    notes = state.notes.trim(),
-                    photos = state.photos.map { NewPlacePhoto(it.uri, it.isPrivate) },
-                    markerStyle = state.markerStyle,
-                    members = state.members
-                )
-            )
-            result.fold(
-                onSuccess = {
+            save().fold(
+                onSuccess = { place ->
                     _uiState.update { it.copy(isSaving = false) }
-                    _events.send(AddPlaceEvent.Saved(collectionId))
+                    _events.send(AddPlaceEvent.Saved(place.collectionId))
                 },
                 onFailure = { error ->
                     _uiState.update {

@@ -2,6 +2,7 @@ package com.rizz.wanderlist.domain.repository
 
 import com.rizz.wanderlist.domain.model.NewPlace
 import com.rizz.wanderlist.domain.model.Place
+import com.rizz.wanderlist.domain.model.PlaceDetails
 import com.rizz.wanderlist.domain.model.SharedPlace
 import kotlinx.coroutines.flow.Flow
 
@@ -29,4 +30,25 @@ interface PlaceRepository {
 
     /** Saves a place owned by the signed-in user. Throws if nobody is signed in. */
     suspend fun createPlace(newPlace: NewPlace): Place
+
+    /**
+     * Applies [details] to a place. The owner may change everything; a collaborator may not
+     * move it to another collection or change its people. Throws when not allowed.
+     */
+    suspend fun updatePlace(placeId: String, details: PlaceDetails): Place
+
+    /**
+     * Removes the signed-in member from a place, along with the photos they added.
+     * The owner can't leave their own place. Throws when not allowed.
+     */
+    suspend fun leavePlace(placeId: String)
+
+    /**
+     * Deletes a place for everyone, with all its photos. Only the owner may do this.
+     * Throws when not allowed.
+     */
+    suspend fun deletePlace(placeId: String)
+
+    /** Deletes every place the signed-in user owns in a collection, with their photos. */
+    suspend fun deletePlacesInCollection(collectionId: String)
 }

@@ -30,4 +30,7 @@ sealed interface Route : NavKey {
 
     @Serializable
     data class PlaceDetail(val placeId: String) : Route
+
+    @Serializable
+    data class EditPlace(val placeId: String) : Route
 }

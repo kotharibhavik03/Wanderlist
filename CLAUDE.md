@@ -53,6 +53,7 @@ Kotlin Multiplatform + Compose Multiplatform travel app (Android + iOS from one 
 - Photos shared by default, with a lock toggle for private.
 - "Shared with me" is a segment on the Collections tab.
 - Place detail (`Route.PlaceDetail(placeId)`, `PlaceDetailRoute/Screen/ViewModel`), opened from collection-page place cards and Shared-with-me cards. Read-only: header (marker, name, "Listed as", status and shared-role pills), Directions, details card (location, visit date, rating, collection for owner only, notes), photos row, people. `PlaceAccess` + `Place.accessFor(user)` in domain. `PlaceRepository.observePlace(id)` returns null unless owner or member; in-memory repo now hides other people's private photos (`visibleTo`). Directions: `util/Directions.kt` with `expect val directionsApps` (Android: Google Maps; iOS: Apple Maps, Google Maps) opened via `LocalUriHandler` https links.
+- Edit place + Leave place. Edit (owner, collaborator) reuses the Add Place form via `Route.EditPlace(placeId)`; `AddPlaceUiState.mode: DraftMode` (New / Loading / Editing(access) / Unavailable); `startEditing(placeId)` is idempotent so returning from the map picker keeps changes. Collaborators don't see Collection or People; edit mode hides Photos. Leave (collaborator, visited-with) on Place detail with a confirm dialog removes the member and their photos. Domain: `PlaceDetails` (editable fields; `NewPlace` = details + photos), shared `validatePlaceDetails`, `UpdatePlaceUseCase`, `PlaceRepository.updatePlace/leavePlace` enforce the access rules. `util/resultOf` = runCatching that rethrows `CancellationException`.
 
 ## Status
 
@@ -70,19 +71,19 @@ Kotlin Multiplatform + Compose Multiplatform travel app (Android + iOS from one 
 - "Shared with me": segmented control (My collections | Shared with me) on the Collections tab; FAB only on My collections. `PlaceRepository.observeSharedWithMe()` returns `SharedPlace(place, myRole)` for places someone else owns where my lowercase email is a member. `InMemoryPlaceRepository` now takes `AuthRepository` and stamps the real signed-in user as `ownerId` / photo `uploaderId`.
 
 ### Compiles on both targets, runtime NOT yet confirmed
-- (nothing)
+- Delete (owner only). Place detail shows "Delete place" for the owner and "Leave place" for members (shared `RemoveAction` dialog; event `PlaceDetailEvent.PlaceRemoved`). Collection page has a ⋮ menu with "Delete collection"; `DeleteCollectionUseCase` deletes the owner's places in it first (`PlaceRepository.deletePlacesInCollection`), then the collection (`CollectionRepository.deleteCollection`). Confirmation names the place count. Moving a place between collections is done via Edit (owner).
+- Check: delete a place from its detail page → back on the collection page with the count down; delete a collection with places → back on Collections, collection gone; a member sees Leave, never Delete.
 
 ### Pending, in order
 1. **UI-4**, remaining steps in order:
-   - Edit place (reuse the Add Place form in edit mode; owner and collaborators) and Leave place (members only; their photos on it go with them). Show these on Place detail based on `PlaceAccess`.
    - Profile (avatar, name, email, sign out; move Sign out off the Collections top bar).
    - Home map extras (marker bottom sheet, collection filter chips, my-location button, `HomeViewModel`).
    - Full-screen photo viewer moves to the Photos step (nothing to view until the picker works).
 2. **Theme polish.** Typography, Shapes, semantic colours (Visited / Wishlist), status-bar style.
 3. **Functional phase** (only after the UI is done):
-   - Firestore: **verify the GitLive `firebase-firestore` version matches KMPAuth's GitLive 3.0.0-alpha01**; link FirebaseFirestore via SPM on iOS; security rules; `FirestoreCollectionRepository` and `FirestorePlaceRepository`. Denormalise member-ids / member-emails arrays on the place for rules and queries, and the owner's name/email so "Shared with me" can show who shared it. **Scope per user** (fixes the account-switch leak): add `ownerId` to `PlaceCollection`; collections query only the signed-in user's; `observePlaces(collectionId)` and place counts return only places the user owns; rules: a collection is readable only by its owner, a place by its owner or an email in `memberEmails`.
+   - Firestore: **verify the GitLive `firebase-firestore` version matches KMPAuth's GitLive 3.0.0-alpha01**; link FirebaseFirestore via SPM on iOS; security rules; `FirestoreCollectionRepository` and `FirestorePlaceRepository`. Denormalise member-ids / member-emails arrays on the place for rules and queries, and the owner's name/email so "Shared with me" can show who shared it. **Scope per user** (fixes the account-switch leak): add `ownerId` to `PlaceCollection`; collections query only the signed-in user's; `observePlaces(collectionId)` and place counts return only places the user owns; rules: a collection is readable only by its owner, a place by its owner or an email in `memberEmails`. Deleting a place or a collection must also delete its photos from Storage; delete a collection's places and the collection in one batch.
    - Google Maps: expect/actual wrapper (Maps Compose on Android, native SDK on iOS), custom markers, real Map Picker with pin-drop and free geocoders. API key stays out of Git.
-   - Photos: picker (expect/actual), compression, Coil 3, Firebase Storage behind `PhotoStorage`. Replace local-uri photo ids with real ids and map `MarkerStyle.Photo` on upload.
+   - Photos: picker (expect/actual), compression, Coil 3, Firebase Storage behind `PhotoStorage`. Replace local-uri photo ids with real ids and map `MarkerStyle.Photo` on upload. Add/remove your own photos on an existing place (edit mode currently hides Photos), and make the edit-mode marker chooser list the place's existing shared photos. When the owner removes a member, remove that member's photos too (needs member email → user id).
    - Collaboration: `users` collection with email lookup, invites for unregistered emails resolved on first sign-in, leave-place, visibility rules.
    - Change profile photo, then CI, README and polish. (Directions already done via https links.)
 

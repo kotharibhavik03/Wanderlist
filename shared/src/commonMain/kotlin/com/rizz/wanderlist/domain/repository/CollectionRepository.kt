@@ -15,4 +15,7 @@ interface CollectionRepository {
         icon: String,
         colors: List<Long>
     ): PlaceCollection
+
+    /** Deletes the collection itself. Its places are removed separately, see DeleteCollectionUseCase. */
+    suspend fun deleteCollection(collectionId: String)
 }

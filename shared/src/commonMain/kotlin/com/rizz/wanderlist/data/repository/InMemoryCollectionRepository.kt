@@ -28,4 +28,8 @@ class InMemoryCollectionRepository : CollectionRepository {
         collections.update { current -> current + created }
         return created
     }
+
+    override suspend fun deleteCollection(collectionId: String) {
+        collections.update { current -> current.filterNot { it.id == collectionId } }
+    }
 }

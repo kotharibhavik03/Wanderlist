@@ -137,7 +137,7 @@ fun AddPlaceScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Add a place") },
+                title = { Text(if (uiState.isEditing) "Edit place" else "Add a place") },
                 navigationIcon = {
                     IconButton(onClick = actions.onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -146,32 +146,48 @@ fun AddPlaceScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .imePadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            LocationSection(uiState.selectedLocation, actions.onOpenMapPicker)
-            DetailsSection(uiState, actions, onPickDate = { showDatePicker = true })
-            PhotosSection(
-                photos = uiState.photos,
-                onAdd = actions.onAddPhotos,
-                onRemove = actions.onPhotoRemoved,
-                onTogglePrivate = actions.onPhotoPrivacyToggled
-            )
-            MarkerSection(uiState, selectedCollection, markerBrush, actions.onMarkerStyleChange)
-            CollectionSection(selectedSummary, markerBrush) { showCollectionSheet = true }
-            PeopleSection(
-                members = uiState.members,
-                onAdd = { showAddPerson = true },
-                onRemove = actions.onMemberRemoved
-            )
-            SaveSection(uiState, onSave = actions.onSavePlace)
+        when (uiState.mode) {
+            is DraftMode.Loading -> Box(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center
+            ) { CircularProgressIndicator() }
 
+            is DraftMode.Unavailable -> Box(
+                modifier = Modifier.fillMaxSize().padding(padding).padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) { Text("This place was deleted or you can no longer edit it.") }
+
+            DraftMode.New, is DraftMode.Editing -> Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .imePadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                LocationSection(uiState.selectedLocation, actions.onOpenMapPicker)
+                DetailsSection(uiState, actions, onPickDate = { showDatePicker = true })
+                // Adding photos to an existing place comes with the photo upload step.
+                if (uiState.mode == DraftMode.New) {
+                    PhotosSection(
+                        photos = uiState.photos,
+                        onAdd = actions.onAddPhotos,
+                        onRemove = actions.onPhotoRemoved,
+                        onTogglePrivate = actions.onPhotoPrivacyToggled
+                    )
+                }
+                MarkerSection(uiState, selectedCollection, markerBrush, actions.onMarkerStyleChange)
+                if (uiState.canManageCollectionAndPeople) {
+                    CollectionSection(selectedSummary, markerBrush) { showCollectionSheet = true }
+                    PeopleSection(
+                        members = uiState.members,
+                        onAdd = { showAddPerson = true },
+                        onRemove = actions.onMemberRemoved
+                    )
+                }
+                SaveSection(uiState, onSave = actions.onSavePlace)
+            }
         }
     }
 
@@ -597,7 +613,10 @@ private fun SaveSection(uiState: AddPlaceUiState, onSave: () -> Unit) {
             if (uiState.isSaving) {
                 CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
             } else {
-                Text("Save place", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (uiState.isEditing) "Save changes" else "Save place",
+                    style = MaterialTheme.typography.titleMedium
+                )
             }
         }
         if (hint != null) {

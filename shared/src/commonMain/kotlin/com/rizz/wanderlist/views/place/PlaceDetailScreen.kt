@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Directions
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.LocationOn
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -46,11 +48,14 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -83,16 +88,53 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun PlaceDetailRoute(placeId: String, onBack: () -> Unit) {
+fun PlaceDetailRoute(
+    placeId: String,
+    onBack: () -> Unit,
+    onEdit: (placeId: String) -> Unit,
+    onPlaceRemoved: () -> Unit
+) {
     val viewModel: PlaceDetailViewModel = koinViewModel(parameters = { parametersOf(placeId) })
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    PlaceDetailScreen(uiState, onBack)
+    val currentOnPlaceRemoved by rememberUpdatedState(onPlaceRemoved)
+
+    LaunchedEffect(viewModel) {
+        viewModel.events.collect { event ->
+            when (event) {
+                PlaceDetailEvent.PlaceRemoved -> currentOnPlaceRemoved()
+            }
+        }
+    }
+
+    PlaceDetailScreen(
+        uiState = uiState,
+        onBack = onBack,
+        onEdit = { onEdit(placeId) },
+        onLeaveConfirmed = viewModel::onLeaveConfirmed,
+        onDeleteConfirmed = viewModel::onDeleteConfirmed,
+        onErrorShown = viewModel::onErrorShown
+    )
 }
 
 @Composable
-fun PlaceDetailScreen(uiState: PlaceDetailUiState, onBack: () -> Unit) {
+fun PlaceDetailScreen(
+    uiState: PlaceDetailUiState,
+    onBack: () -> Unit,
+    onEdit: () -> Unit,
+    onLeaveConfirmed: () -> Unit,
+    onDeleteConfirmed: () -> Unit,
+    onErrorShown: () -> Unit
+) {
     val snackbarHostState = remember { SnackbarHostState() }
     val content = uiState as? PlaceDetailUiState.Content
+    var pendingAction by rememberSaveable { mutableStateOf<RemoveAction?>(null) }
+
+    LaunchedEffect(content?.errorMessage) {
+        content?.errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            onErrorShown()
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -109,6 +151,13 @@ fun PlaceDetailScreen(uiState: PlaceDetailUiState, onBack: () -> Unit) {
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (content?.canEdit == true) {
+                        IconButton(onClick = onEdit) {
+                            Icon(Icons.Default.Edit, contentDescription = "Edit place")
+                        }
                     }
                 }
             )
@@ -132,7 +181,70 @@ fun PlaceDetailScreen(uiState: PlaceDetailUiState, onBack: () -> Unit) {
                 DetailsCard(uiState.place, uiState.collection)
                 PhotosSection(uiState.place.photos)
                 PeopleSection(uiState.place.members, uiState.access)
+                when {
+                    uiState.canDelete -> RemoveButton(RemoveAction.DELETE, uiState.isBusy) {
+                        pendingAction = RemoveAction.DELETE
+                    }
+                    uiState.canLeave -> RemoveButton(RemoveAction.LEAVE, uiState.isBusy) {
+                        pendingAction = RemoveAction.LEAVE
+                    }
+                }
             }
+        }
+    }
+
+    pendingAction?.let { action ->
+        AlertDialog(
+            onDismissRequest = { pendingAction = null },
+            title = { Text(action.dialogTitle) },
+            text = { Text(action.dialogMessage) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingAction = null
+                    when (action) {
+                        RemoveAction.LEAVE -> onLeaveConfirmed()
+                        RemoveAction.DELETE -> onDeleteConfirmed()
+                    }
+                }) { Text(action.confirmLabel, color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { pendingAction = null }) { Text("Cancel") } }
+        )
+    }
+}
+
+/** The two ways a place leaves this user's app: members leave it, the owner deletes it. */
+private enum class RemoveAction(
+    val buttonLabel: String,
+    val dialogTitle: String,
+    val dialogMessage: String,
+    val confirmLabel: String
+) {
+    LEAVE(
+        buttonLabel = "Leave place",
+        dialogTitle = "Leave this place?",
+        dialogMessage = "You'll lose access to it, and any photos you added to it will be removed.",
+        confirmLabel = "Leave"
+    ),
+    DELETE(
+        buttonLabel = "Delete place",
+        dialogTitle = "Delete this place?",
+        dialogMessage = "It will be removed for everyone it's shared with, along with all its photos. " +
+                "This can't be undone.",
+        confirmLabel = "Delete"
+    )
+}
+
+@Composable
+private fun RemoveButton(action: RemoveAction, isBusy: Boolean, onClick: () -> Unit) {
+    TextButton(
+        onClick = onClick,
+        enabled = !isBusy,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        if (isBusy) {
+            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+        } else {
+            Text(action.buttonLabel, color = MaterialTheme.colorScheme.error)
         }
     }
 }

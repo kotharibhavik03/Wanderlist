@@ -17,6 +17,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -61,6 +62,7 @@ private val navConfig = SavedStateConfiguration {
                 Route.CollectionDetail.serializer()
             )
             subclass(Route.PlaceDetail::class, Route.PlaceDetail.serializer())
+            subclass(Route.EditPlace::class, Route.EditPlace.serializer())
 
         }
     }
@@ -78,7 +80,8 @@ fun AppNavigation(onSignOut: () -> Unit) {
 
     val goBack: () -> Unit = {
         if (backStack.size > 1) {
-            if (backStack.lastOrNull() is Route.AddPlace) addPlaceViewModel.clearDraft()
+            val leaving = backStack.lastOrNull()
+            if (leaving is Route.AddPlace || leaving is Route.EditPlace) addPlaceViewModel.clearDraft()
             backStack.removeLastOrNull()
         }
     }
@@ -237,14 +240,36 @@ fun AppNavigation(onSignOut: () -> Unit) {
                         onAddPlace = {
                             addPlaceViewModel.onCollectionSelected(key.collectionId)
                             backStack.add(Route.AddPlace)
-                        }
+                        },
+                        onDeleted = { backStack.removeLastOrNull() }
                     )
                 }
 
                 entry<Route.PlaceDetail> { key ->
                     PlaceDetailRoute(
                         placeId = key.placeId,
-                        onBack = { backStack.removeLastOrNull() }
+                        onBack = { backStack.removeLastOrNull() },
+                        onEdit = { id ->
+                            // Start loading before the screen appears, so it never flashes the empty form.
+                            addPlaceViewModel.startEditing(id)
+                            backStack.add(Route.EditPlace(id))
+                        },
+                        onPlaceRemoved = { backStack.removeLastOrNull() }
+                    )
+                }
+
+                entry<Route.EditPlace> { key ->
+                    // Normally started by onEdit already; this covers the screen being recreated.
+                    LaunchedEffect(key.placeId) { addPlaceViewModel.startEditing(key.placeId) }
+                    AddPlaceRoute(
+                        viewModel = addPlaceViewModel,
+                        onBack = goBack,
+                        onOpenMapPicker = { backStack.add(Route.MapPicker) },
+                        onCreateCollection = { backStack.add(Route.CreateCollection) },
+                        onSaved = {
+                            backStack.removeLastOrNull() // back to the place's detail page
+                            addPlaceViewModel.clearDraft()
+                        }
                     )
                 }
             }
