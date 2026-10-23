@@ -20,5 +20,7 @@ node_modules/
 androidApp/google-services.json
 **/GoogleService-Info.plist
 .firebaserc
+# Google Maps iOS API key (Android's lives in local.properties)
+iosApp/Configuration/Secrets.xcconfig
 .firebase/
 .swiftpm-locks/**/swiftPMCheckout/

@@ -1,3 +1,4 @@
+import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -12,6 +13,11 @@ kotlin {
         jvmTarget = JvmTarget.JVM_17
     }
 }
+// Secrets kept out of Git: MAPS_API_KEY lives in local.properties.
+val localProperties = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+
 dependencies {
     implementation(project(":shared"))
 
@@ -31,6 +37,7 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
+        manifestPlaceholders["MAPS_API_KEY"] = localProperties.getProperty("MAPS_API_KEY", "")
     }
     packaging {
         resources {

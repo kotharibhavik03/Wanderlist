@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		9A3E0C1F2B7D4E5F6A7B8C01 /* GoogleMaps in Frameworks */ = {isa = PBXBuildFile; productRef = 9A3E0C1F2B7D4E5F6A7B8C02 /* GoogleMaps */; };
 		430549CE3089EDA300287B58 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 430549CD3089EDA300287B58 /* GoogleService-Info.plist */; };
 		435A649B308A7CD500D7890E /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 435A649A308A7CD500D7890E /* GoogleSignIn */; };
 		435A649D308A7CD500D7890E /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 435A649C308A7CD500D7890E /* GoogleSignInSwift */; };
@@ -21,7 +22,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		02894BD8904584932911EB34 /* Exceptions for "iosApp" folder in "iosApp" target */ = {
+		02894BD8904584932911EB34 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -33,13 +34,21 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4EF7E780A6884AED374D26AB /* Configuration */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
 			path = Configuration;
 			sourceTree = "<group>";
 		};
 		F571B1003D50CEC53792DCC0 /* iosApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				02894BD8904584932911EB34 /* Exceptions for "iosApp" folder in "iosApp" target */,
+				02894BD8904584932911EB34 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+			);
+			explicitFileTypes = {
+			};
+			explicitFolders = (
 			);
 			path = iosApp;
 			sourceTree = "<group>";
@@ -56,6 +65,7 @@
 				CB6C5CE31CA2603C586CDA82 /* KotlinMultiplatformLinkedPackage in Frameworks */,
 				435A649B308A7CD500D7890E /* GoogleSignIn in Frameworks */,
 				435A64A0308A7D2B00D7890E /* FirebaseAuth in Frameworks */,
+				9A3E0C1F2B7D4E5F6A7B8C01 /* GoogleMaps in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -106,6 +116,7 @@
 				435A649C308A7CD500D7890E /* GoogleSignInSwift */,
 				435A649F308A7D2B00D7890E /* FirebaseAuth */,
 				435A64A1308A7D2B00D7890E /* FirebaseCore */,
+				9A3E0C1F2B7D4E5F6A7B8C02 /* GoogleMaps */,
 			);
 			productName = iosApp;
 			productReference = 721259C6872BC0336A941C1E /* Wanderlist.app */;
@@ -139,6 +150,7 @@
 				DF5F5935A9F79E44812AD24A /* XCLocalSwiftPackageReference "KotlinMultiplatformLinkedPackage" */,
 				435A6499308A7CD500D7890E /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				435A649E308A7D2B00D7890E /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				9A3E0C1F2B7D4E5F6A7B8C03 /* XCRemoteSwiftPackageReference "ios-maps-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 180CE6DF6F1FDBFEECF56E3D /* Products */;
@@ -430,6 +442,14 @@
 				minimumVersion = 12.17.0;
 			};
 		};
+		9A3E0C1F2B7D4E5F6A7B8C03 /* XCRemoteSwiftPackageReference "ios-maps-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googlemaps/ios-maps-sdk";
+			requirement = {
+				kind = exactVersion;
+				version = 10.15.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -456,6 +476,11 @@
 		AB09DCCEDD178DC87B28399C /* KotlinMultiplatformLinkedPackage */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = KotlinMultiplatformLinkedPackage;
+		};
+		9A3E0C1F2B7D4E5F6A7B8C02 /* GoogleMaps */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9A3E0C1F2B7D4E5F6A7B8C03 /* XCRemoteSwiftPackageReference "ios-maps-sdk" */;
+			productName = GoogleMaps;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

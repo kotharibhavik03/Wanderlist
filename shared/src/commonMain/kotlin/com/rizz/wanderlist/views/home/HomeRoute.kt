@@ -1,6 +1,5 @@
 package com.rizz.wanderlist.views.home
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -21,7 +20,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
@@ -115,7 +113,11 @@ fun HomeScreen(
 
                 uiState.isSearching -> SearchResults(uiState, onPlaceClick)
 
-                else -> MapPlaceholder(placeCount = uiState.places.size)
+                else -> PlacesMap(
+                    places = uiState.places,
+                    onMarkerClick = onPlaceClick,
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp)
+                )
             }
         }
     }
@@ -267,50 +269,6 @@ private fun SearchResults(uiState: HomeUiState, onPlaceClick: (placeId: String) 
                 },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 modifier = Modifier.clickable { onPlaceClick(place.id) }
-            )
-        }
-    }
-}
-
-/** Until Google Maps is connected, this marks where the map goes and says what it will show. */
-@Composable
-private fun MapPlaceholder(placeCount: Int) {
-    val colors = MaterialTheme.colorScheme
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 12.dp)
-            .background(color = colors.surfaceVariant, shape = MaterialTheme.shapes.large),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(24.dp)
-        ) {
-            Surface(shape = CircleShape, color = colors.surface) {
-                Icon(
-                    imageVector = Icons.Default.LocationOn,
-                    contentDescription = null,
-                    tint = colors.primary,
-                    modifier = Modifier.padding(14.dp).size(34.dp)
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = if (placeCount == 0) "Your map starts here" else "${pluralize(placeCount, "place")} to map",
-                color = colors.onSurface,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = if (placeCount == 0) {
-                    "Add places to see your memories on the map."
-                } else {
-                    "They'll appear here as markers once the map is connected. Search to find one now."
-                },
-                color = colors.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center
             )
         }
     }

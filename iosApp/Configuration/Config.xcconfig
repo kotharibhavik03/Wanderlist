@@ -1,3 +1,6 @@
+// Secrets.xcconfig is gitignored and holds MAPS_API_KEY. "#include?" keeps builds working without it.
+#include? "Secrets.xcconfig"
+
 TEAM_ID=
 
 PRODUCT_NAME=Wanderlist

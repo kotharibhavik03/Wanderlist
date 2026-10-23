@@ -74,6 +74,7 @@ kotlin {
             implementation(libs.kmpauth.firebase)
             implementation(libs.kmpauth.uihelper)
             implementation(libs.gitlive.firebase.firestore)
+            implementation(libs.kmp.maps.compose)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
