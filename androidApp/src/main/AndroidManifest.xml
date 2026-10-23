@@ -17,9 +17,13 @@
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="${MAPS_API_KEY}" />
+        <!-- adjustResize: with edge-to-edge the window stays full size and Compose gets the
+             keyboard's height as insets (imePadding), instead of Android sliding the whole
+             window up and hiding the top bar. -->
         <activity
             android:exported="true"
-            android:name=".MainActivity">
+            android:name=".MainActivity"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

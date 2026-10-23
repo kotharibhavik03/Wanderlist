@@ -6,6 +6,7 @@ import com.rizz.wanderlist.domain.model.CollectionSummary
 import com.rizz.wanderlist.domain.model.GeoPoint
 import com.rizz.wanderlist.domain.model.Place
 import com.rizz.wanderlist.domain.model.PlaceCollection
+import com.rizz.wanderlist.domain.model.PlacePhoto
 import com.rizz.wanderlist.domain.model.SelectedLocation
 import com.rizz.wanderlist.domain.repository.AuthRepository
 import com.rizz.wanderlist.domain.repository.LocationService
@@ -14,16 +15,34 @@ import com.rizz.wanderlist.domain.usecase.LocationSearchState
 import com.rizz.wanderlist.domain.usecase.ObserveCollectionSummariesUseCase
 import com.rizz.wanderlist.domain.usecase.SearchLocationsUseCase
 import com.rizz.wanderlist.util.resultOf
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+
+/**
+ * Where the map starts. Home tries to show the user's position once per session; until that
+ * settles the first framing of the places waits, so the camera doesn't jump between the two.
+ */
+enum class StartPosition {
+    /** Asking for permission or waiting for a fix. */
+    Locating,
+
+    /** Found (and shown, unless the user had already picked something to look at). */
+    Located,
+
+    /** No permission, location off, or no fix in time: the map frames the places instead. */
+    Unavailable
+}
 
 /** A place as Home shows it. [collection] is null for places shared with the user. */
 data class HomePlace(val place: Place, val collection: PlaceCollection?) {
@@ -53,6 +72,7 @@ data class HomeUiState(
     val isLocating: Boolean = false,
     /** Where the map should fly after "my location"; cleared once it has. */
     val myLocation: GeoPoint? = null,
+    val startPosition: StartPosition = StartPosition.Locating,
     /** A one-off message for the user (e.g. location is off); cleared once shown. */
     val message: String? = null
 ) {
@@ -60,6 +80,9 @@ data class HomeUiState(
     val showingAll: Boolean get() = selectedCollectionIds.isEmpty() && !sharedSelected
     val isSearching: Boolean get() = query.isNotBlank()
 }
+
+/** The photos of the place whose sheet is open, tagged with that place so they're never shown for another. */
+data class SelectedPlacePhotos(val placeId: String? = null, val photos: List<PlacePhoto> = emptyList())
 
 class HomeViewModel(
     placeRepository: PlaceRepository,
@@ -73,7 +96,8 @@ class HomeViewModel(
         val hasPermission: Boolean = false,
         val isLocating: Boolean = false,
         val flyTo: GeoPoint? = null,
-        val message: String? = null
+        val message: String? = null,
+        val start: StartPosition = StartPosition.Locating
     )
 
     private val location = MutableStateFlow(LocationState(hasPermission = locationService.hasPermission()))
@@ -86,6 +110,17 @@ class HomeViewModel(
     )
 
     private val filters = MutableStateFlow(Filters())
+
+    private val selectedPlaceId = MutableStateFlow<String?>(null)
+
+    /** The map's places don't carry photos, so the open sheet's place loads its own. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val selectedPlacePhotos: StateFlow<SelectedPlacePhotos> = selectedPlaceId
+        .flatMapLatest { id ->
+            if (id == null) flowOf(SelectedPlacePhotos())
+            else placeRepository.observePhotos(id).map { SelectedPlacePhotos(id, it) }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SelectedPlacePhotos())
 
     /** Searches everywhere as the user types (see SearchLocationsUseCase for pacing). */
     private val locationSearch: Flow<LocationSearchState> = searchLocations(filters.map { it.query })
@@ -130,11 +165,17 @@ class HomeViewModel(
             hasLocationPermission = here.hasPermission,
             isLocating = here.isLocating,
             myLocation = here.flyTo,
+            startPosition = here.start,
             message = here.message
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
     fun onQueryChange(query: String) = filters.update { it.copy(query = query) }
+
+    /** The place whose sheet is open, or null when none is. */
+    fun onSelectedPlaceChanged(placeId: String?) {
+        selectedPlaceId.value = placeId
+    }
 
     fun onAllSelected() = filters.update { it.copy(collectionIds = emptySet(), shared = false) }
 
@@ -177,6 +218,43 @@ class HomeViewModel(
         }
     }
 
+    /** Whether Home has already tried to show the user's position this session. */
+    private var startLocationClaimed = false
+
+    /**
+     * Home calls this when it appears. True only the first time: Home then shows the user's
+     * position (asking for permission if needed) and reports back with [locateAtStart] or
+     * [onStartLocationUnavailable]. Home stays at the bottom of the back stack, so this
+     * ViewModel, and the one try, lasts until sign-out.
+     */
+    fun claimStartLocation(): Boolean {
+        if (startLocationClaimed) return false
+        startLocationClaimed = true
+        return true
+    }
+
+    /** Permission is granted: find the user and fly there. Fails quietly (the map frames the places). */
+    fun locateAtStart() {
+        location.update { it.copy(isLocating = true, hasPermission = true) }
+        viewModelScope.launch {
+            val here = withTimeoutOrNull(START_LOCATE_TIMEOUT_MS) {
+                resultOf { locationService.currentLocation() }.getOrNull()
+            }
+            // The user may have opened a place or a search result meanwhile: don't pull the map away.
+            val userIsLooking = selectedPlaceId.value != null || filters.value.pickedLocation != null
+            location.update {
+                when {
+                    here == null -> it.copy(isLocating = false, start = StartPosition.Unavailable)
+                    userIsLooking -> it.copy(isLocating = false, start = StartPosition.Located)
+                    else -> it.copy(isLocating = false, start = StartPosition.Located, flyTo = here)
+                }
+            }
+        }
+    }
+
+    /** Location access was refused at start: frame the places, without a message. */
+    fun onStartLocationUnavailable() = location.update { it.copy(start = StartPosition.Unavailable) }
+
     fun onMyLocationShown() = location.update { it.copy(flyTo = null) }
 
     fun onMessageShown() = location.update { it.copy(message = null) }
@@ -184,6 +262,9 @@ class HomeViewModel(
     private companion object {
         /** A fix normally takes a few seconds; give up rather than spin forever. */
         const val LOCATE_TIMEOUT_MS = 15_000L
+
+        /** At start the places are waiting to be framed, so give up sooner. */
+        const val START_LOCATE_TIMEOUT_MS = 8_000L
     }
 
 }

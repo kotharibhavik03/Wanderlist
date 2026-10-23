@@ -16,6 +16,14 @@ interface CollectionRepository {
         colors: List<Long>
     ): PlaceCollection
 
+    /** Changes a collection's name, icon and colours. Only its owner may. Returns it as saved. */
+    suspend fun updateCollection(
+        collectionId: String,
+        name: String,
+        icon: String,
+        colors: List<Long>
+    ): PlaceCollection
+
     /** Deletes the collection itself. Its places are removed separately, see DeleteCollectionUseCase. */
     suspend fun deleteCollection(collectionId: String)
 }

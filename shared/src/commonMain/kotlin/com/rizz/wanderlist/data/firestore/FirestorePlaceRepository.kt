@@ -6,6 +6,7 @@ import com.rizz.wanderlist.domain.model.NewPlace
 import com.rizz.wanderlist.domain.model.Place
 import com.rizz.wanderlist.domain.model.PlaceAccess
 import com.rizz.wanderlist.domain.model.PlaceDetails
+import com.rizz.wanderlist.domain.model.PlacePhoto
 import com.rizz.wanderlist.domain.model.SharedPlace
 import com.rizz.wanderlist.domain.model.User
 import com.rizz.wanderlist.domain.model.accessFor
@@ -44,13 +45,19 @@ class FirestorePlaceRepository(
         places.where { ("ownerId" equalTo user.id) and ("collectionId" equalTo collectionId) }
             .snapshots
             .map { snapshot -> snapshot.toPlaces().sortedByDescending { it.createdAtEpochMillis } }
+            .withPhotos(user)
     }
 
     override fun observePlace(placeId: String): Flow<Place?> = perUser(null) { user ->
-        places.document(placeId).snapshots.map { snapshot ->
+        val place = places.document(placeId).snapshots.map { snapshot ->
             if (!snapshot.exists) return@map null
             snapshot.data<PlaceDocument>().toDomain(snapshot.id).takeIf { it.accessFor(user) != null }
         }
+        combine(place, photosOf(placeId, user)) { found, photos -> found?.copy(photos = photos) }
+    }
+
+    override fun observePhotos(placeId: String): Flow<List<PlacePhoto>> = perUser(emptyList()) { user ->
+        photosOf(placeId, user)
     }
 
     override fun observeVisiblePlaces(): Flow<List<Place>> = perUser(emptyList()) { user ->
@@ -78,13 +85,9 @@ class FirestorePlaceRepository(
 
     override suspend fun createPlace(newPlace: NewPlace, onPhotoUploaded: (uploaded: Int) -> Unit): Place {
         val owner = requireSignedInUser()
+        requireNotAMember(owner, newPlace.details)
         val now = now()
         val reference = places.document // new auto-id, known before anything is written
-        val document = newPlace.details.toDocument(
-            owner = PlaceOwner(id = owner.id, name = owner.displayName, email = owner.email?.lowercase()),
-            createdAt = now,
-            updatedAt = now
-        )
 
         val uploadedPaths = mutableListOf<String>()
         try {
@@ -98,6 +101,15 @@ class FirestorePlaceRepository(
             }
 
             // 2. The place and its photo documents in one batch: they appear together or not at all.
+            //    A photo marker stores its photo's URL, so the map can draw it without the photos.
+            val details = newPlace.details.withMarkerPhotoUrl { photoId ->
+                photos.firstOrNull { (id, photo) -> id == photoId && !photo.isPrivate }?.second?.url
+            }
+            val document = details.toDocument(
+                owner = PlaceOwner(id = owner.id, name = owner.displayName, email = owner.email?.lowercase()),
+                createdAt = now,
+                updatedAt = now
+            )
             val batch = firestore.batch()
                 .set(reference, PlaceDocument.serializer(), document) { encodeDefaults = true }
             photos.forEach { (photoId, photo) ->
@@ -130,7 +142,7 @@ class FirestorePlaceRepository(
 
             val access = currentPlace.accessFor(user)
             val allowed = when (access) {
-                PlaceAccess.OWNER -> details
+                PlaceAccess.OWNER -> details.also { requireNotAMember(user, it) }
                 // A collaborator can't move the place or change its people; keep the current ones.
                 PlaceAccess.COLLABORATOR -> details.copy(
                     collectionId = currentPlace.collectionId,
@@ -138,12 +150,20 @@ class FirestorePlaceRepository(
                 )
                 PlaceAccess.VISITED_WITH, null -> error("You can't edit this place.")
             }
+            // A photo marker must be one of the place's shared photos; its URL comes from the
+            // photo's own document, never from the client.
             val marker = allowed.markerStyle
-            require(marker !is MarkerStyle.Photo || currentPlace.photos.any { it.id == marker.photoId && !it.isPrivate }) {
-                "The marker photo must be one of the shared photos."
+            val checked = if (marker is MarkerStyle.Photo) {
+                val photo = get(reference.collection(PHOTOS).document(marker.photoId))
+                require(photo.exists && !photo.data(PhotoDocument.serializer()).isPrivate) {
+                    "The marker photo must be one of the shared photos."
+                }
+                allowed.copy(markerStyle = marker.copy(url = photo.data(PhotoDocument.serializer()).url))
+            } else {
+                allowed
             }
 
-            val updated = allowed.toDocument(owner = current.owner, createdAt = current.createdAt, updatedAt = now())
+            val updated = checked.toDocument(owner = current.owner, createdAt = current.createdAt, updatedAt = now())
             if (access == PlaceAccess.OWNER) {
                 set(reference, PlaceDocument.serializer(), updated) { encodeDefaults = true }
             } else {
@@ -197,6 +217,41 @@ class FirestorePlaceRepository(
         }
     }
 
+    /**
+     * The photos of one place that [user] may read, oldest first. Two queries, because the
+     * rules only allow reads they can prove: shared photos, and the user's own (private too).
+     * An error (e.g. the place was deleted or the user removed) emits an empty list.
+     */
+    private fun photosOf(placeId: String, user: User): Flow<List<PlacePhoto>> {
+        val photos = places.document(placeId).collection(PHOTOS)
+        val shared = photos.where { "isPrivate" equalTo false }.snapshots.map { it.toPhotos() }
+        val mine = photos.where { "uploaderId" equalTo user.id }.snapshots.map { it.toPhotos() }
+        return combine(shared, mine) { sharedPhotos, myPhotos ->
+            (sharedPhotos + myPhotos).distinctBy { it.id }.sortedBy { it.createdAtEpochMillis }
+        }.catch { emit(emptyList()) }
+    }
+
+    /**
+     * Adds each place's photos. The photo listeners restart only when the set of places
+     * changes, not on every edit to a place. (The place list is collected twice; Firestore
+     * shares one listener between identical queries.)
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun Flow<List<Place>>.withPhotos(user: User): Flow<List<Place>> {
+        val photosByPlace = map { list -> list.map { it.id } }
+            .distinctUntilChanged()
+            .flatMapLatest { ids ->
+                if (ids.isEmpty()) {
+                    flowOf(emptyMap())
+                } else {
+                    combine(ids.map { id -> photosOf(id, user).map { id to it } }) { it.toMap() }
+                }
+            }
+        return combine(this, photosByPlace) { list, photos ->
+            list.map { it.copy(photos = photos[it.id].orEmpty()) }
+        }
+    }
+
     private fun ownedPlaces(user: User): Flow<List<Place>> =
         places.where { "ownerId" equalTo user.id }.snapshots.map { it.toPlaces() }
 
@@ -221,6 +276,24 @@ class FirestorePlaceRepository(
 
     private fun QuerySnapshot.toPlaces(): List<Place> =
         documents.map { it.data<PlaceDocument>().toDomain(it.id) }
+
+    private fun QuerySnapshot.toPhotos(): List<PlacePhoto> =
+        documents.map { it.data<PhotoDocument>().toDomain(it.id) }
+
+    /** [this] with a photo marker's URL filled in by [urlOf], or the collection default if it has none. */
+    private fun PlaceDetails.withMarkerPhotoUrl(urlOf: (photoId: String) -> String?): PlaceDetails {
+        val marker = markerStyle as? MarkerStyle.Photo ?: return this
+        val url = urlOf(marker.photoId)
+        return copy(markerStyle = if (url != null) marker.copy(url = url) else MarkerStyle.CollectionDefault)
+    }
+
+    /** The owner already has the place; firestore.rules refuses them as a member too. */
+    private fun requireNotAMember(owner: User, details: PlaceDetails) {
+        val email = owner.email?.lowercase() ?: return
+        require(details.members.none { it.email.lowercase() == email }) {
+            "You can't add yourself to your own place."
+        }
+    }
 
     private suspend fun requireSignedInUser(): User =
         authRepository.currentUser.first() ?: error("You need to be signed in to do that.")

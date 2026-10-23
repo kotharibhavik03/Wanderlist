@@ -36,7 +36,7 @@ import androidx.navigation3.ui.NavDisplay
 import androidx.savedstate.serialization.SavedStateConfiguration
 import com.rizz.wanderlist.views.collection.CollectionDetailRoute
 import com.rizz.wanderlist.views.collection.CollectionsRoute
-import com.rizz.wanderlist.views.collection.CreateCollectionRoute
+import com.rizz.wanderlist.views.collection.CollectionFormRoute
 import com.rizz.wanderlist.views.home.HomeRoute
 import com.rizz.wanderlist.views.place.AddPlaceRoute
 import com.rizz.wanderlist.views.place.AddPlaceViewModel
@@ -60,6 +60,10 @@ private val navConfig = SavedStateConfiguration {
             subclass(
                 Route.CreateCollection::class,
                 Route.CreateCollection.serializer()
+            )
+            subclass(
+                Route.EditCollection::class,
+                Route.EditCollection.serializer()
             )
             subclass(Route.Profile::class, Route.Profile.serializer())
             subclass(
@@ -209,13 +213,18 @@ fun AppNavigation(onSignOut: () -> Unit) {
                 }
 
                 entry<Route.CreateCollection> {
-                    CreateCollectionRoute(
-                        onBack = {
-                            backStack.removeLastOrNull()
-                        },
-                        onSaved = {
-                            backStack.removeLastOrNull()
-                        }
+                    CollectionFormRoute(
+                        collectionId = null,
+                        onBack = { backStack.removeLastOrNull() },
+                        onSaved = { backStack.removeLastOrNull() }
+                    )
+                }
+                entry<Route.EditCollection> { key ->
+                    CollectionFormRoute(
+                        collectionId = key.collectionId,
+                        onBack = { backStack.removeLastOrNull() },
+                        // Back to the collection's page, which shows the change live.
+                        onSaved = { backStack.removeLastOrNull() }
                     )
                 }
                 entry<Route.Profile> {
@@ -268,6 +277,7 @@ fun AppNavigation(onSignOut: () -> Unit) {
                             addPlaceViewModel.onCollectionSelected(key.collectionId)
                             backStack.add(Route.AddPlace)
                         },
+                        onEdit = { backStack.add(Route.EditCollection(key.collectionId)) },
                         onDeleted = { backStack.removeLastOrNull() }
                     )
                 }

@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -26,9 +26,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -59,7 +57,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -78,6 +75,9 @@ import com.rizz.wanderlist.util.directionsApps
 import com.rizz.wanderlist.util.directionsUrl
 import com.rizz.wanderlist.util.formatCoordinates
 import com.rizz.wanderlist.util.formatDate
+import com.rizz.wanderlist.views.photo.PhotoTile
+import com.rizz.wanderlist.views.photo.PhotoViewer
+import com.rizz.wanderlist.views.photo.ViewerPhoto
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -264,7 +264,7 @@ private fun Header(place: Place, access: PlaceAccess, collection: PlaceCollectio
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        PlaceMarker(place.markerStyle, collection, size = 64.dp)
+        PlaceMarker(place.markerStyle, collection, place.markerPhotoUrl, size = 64.dp)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(place.displayName, style = MaterialTheme.typography.titleLarge)
             // When the user renamed it, still show what the map calls it.
@@ -415,8 +415,10 @@ private fun SectionTitle(text: String) {
     )
 }
 
+/** The place's photos in a row; tapping one opens the full-screen viewer at that photo. */
 @Composable
 internal fun PhotosSection(photos: List<PlacePhoto>) {
+    var viewing by rememberSaveable { mutableStateOf<Int?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionTitle("Photos (${photos.size})")
         if (photos.isEmpty()) {
@@ -427,29 +429,23 @@ internal fun PhotosSection(photos: List<PlacePhoto>) {
             )
         } else {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(photos, key = { it.id }) { photo ->
-                    Box(
-                        modifier = Modifier
-                            .size(110.dp)
-                            .clip(MaterialTheme.shapes.small)
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .semantics { contentDescription = if (photo.isPrivate) "Private photo" else "Photo" },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        // Real image loading (Coil) arrives with the photo step.
-                        Icon(Icons.Default.Image, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (photo.isPrivate) {
-                            Icon(
-                                Icons.Default.Lock,
-                                contentDescription = null,
-                                modifier = Modifier.align(Alignment.BottomStart).padding(6.dp).size(16.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
+                itemsIndexed(photos, key = { _, photo -> photo.id }) { index, photo ->
+                    PhotoTile(
+                        photo = photo,
+                        description = "Photo ${index + 1} of ${photos.size}",
+                        onClick = { viewing = index },
+                        modifier = Modifier.size(110.dp)
+                    )
                 }
             }
         }
+    }
+    viewing?.let { index ->
+        PhotoViewer(
+            photos = photos.map { ViewerPhoto(it) },
+            initialIndex = index,
+            onDismiss = { viewing = null }
+        )
     }
 }
 

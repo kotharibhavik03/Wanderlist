@@ -14,13 +14,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.unit.dp
 import com.rizz.wanderlist.domain.model.GeoPoint
 import com.rizz.wanderlist.domain.model.SelectedLocation
+import com.rizz.wanderlist.views.image.rememberLoadedPhoto
 import com.rizz.wanderlist.views.map.AppMapUiSettings
 import com.rizz.wanderlist.views.map.WorldView
 import com.rizz.wanderlist.views.map.animateOrJump
@@ -57,6 +60,8 @@ internal fun PlacesMap(
     pin: SelectedLocation?,
     /** Fly here once ("my location"), then report it with [onMyLocationShown]. */
     myLocation: GeoPoint?,
+    /** Whether the user's position is shown at start; the first framing of the places waits for it. */
+    startPosition: StartPosition,
     onMyLocationShown: () -> Unit,
     /** Draw the blue "you are here" dot (only once location access is granted). */
     showMyLocation: Boolean,
@@ -71,11 +76,22 @@ internal fun PlacesMap(
     var mapLoaded by remember { mutableStateOf(false) }
     val properties = rememberMapProperties(showMyLocation)
 
-    // Frame the visible places whenever the set changes (first load, a filter chip, a new place).
-    // Only after the map has loaded: framing bounds on a map with no size crashes on Android.
-    val placeIds = places.map { it.place.id }
-    LaunchedEffect(mapLoaded, placeIds) {
-        if (mapLoaded && places.isNotEmpty()) cameraState.animate(cameraUpdateFor(places))
+    // Frame the visible places whenever the set changes (a filter chip, a new place). The first
+    // set waits until the start position settles, and isn't framed if the map started on the
+    // user's position. Only after the map has loaded: framing bounds on a map with no size
+    // crashes on Android.
+    // The last set handled is saved, like the camera: Home leaves composition while another tab
+    // is open, and coming back must not count as a change (it used to reframe the places,
+    // pulling the camera away from where the user left it).
+    val placesKey = places.map { it.place.id }.sorted().joinToString(",")
+    var handledPlacesKey by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(mapLoaded, placesKey, startPosition) {
+        if (!mapLoaded || places.isEmpty() || startPosition == StartPosition.Locating) return@LaunchedEffect
+        if (placesKey == handledPlacesKey) return@LaunchedEffect
+        val isFirstSet = handledPlacesKey == null
+        handledPlacesKey = placesKey
+        if (isFirstSet && startPosition == StartPosition.Located) return@LaunchedEffect
+        cameraState.animate(cameraUpdateFor(places))
     }
 
     // Bring the selected place into view, centred in the area the overlays leave visible.
@@ -117,9 +133,12 @@ internal fun PlacesMap(
                 key(item.place.id) {
                     val place = item.place
                     val isSelected = place.id == selectedPlaceId
+                    // Loaded here, not inside the marker: the marker is drawn to a bitmap once,
+                    // and redrawn when its keys change, so it's redrawn when the photo arrives.
+                    val photo = rememberLoadedPhoto(place.markerPhotoUrl, SelectedBadgeSize)
                     MarkerComposable(
                         // Re-render the marker image only when its look changes.
-                        place.markerStyle, item.collection?.icon.orEmpty(), item.collection?.colors.orEmpty(), isSelected,
+                        place.markerStyle, item.collection?.icon.orEmpty(), item.collection?.colors.orEmpty(), isSelected, photo != null,
                         state = rememberUpdatedMarkerState(LatLng(place.latitude, place.longitude)),
                         title = place.displayName,
                         // Centred on the spot: the badge is a circle, not a pin with a point.
@@ -131,7 +150,7 @@ internal fun PlacesMap(
                             true // handled: don't also show the default info window
                         }
                     ) {
-                        MapBadge(item, isSelected)
+                        MapBadge(item, isSelected, photo)
                     }
                 }
             }
@@ -157,9 +176,9 @@ internal fun PlacesMap(
  * larger with a primary-coloured ring.
  */
 @Composable
-private fun MapBadge(item: HomePlace, isSelected: Boolean) {
+private fun MapBadge(item: HomePlace, isSelected: Boolean, photo: Painter?) {
     val ringColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
-    val badgeSize = if (isSelected) 52.dp else 40.dp
+    val badgeSize = if (isSelected) SelectedBadgeSize else 40.dp
     Box(
         modifier = Modifier
             .size(badgeSize + 6.dp)
@@ -167,7 +186,8 @@ private fun MapBadge(item: HomePlace, isSelected: Boolean) {
             .padding(3.dp),
         contentAlignment = Alignment.Center
     ) {
-        PlaceMarker(item.place.markerStyle, item.collection, size = badgeSize)
+        // No URL here, only the loaded photo: until it arrives the marker shows the collection badge.
+        PlaceMarker(item.place.markerStyle, item.collection, photoUrl = null, size = badgeSize, loadedPhoto = photo)
     }
 }
 
@@ -184,6 +204,9 @@ private fun cameraUpdateFor(places: List<HomePlace>): CameraUpdate {
         CameraUpdateFactory.newLatLngBounds(LatLngBounds(LatLng(south, west), LatLng(north, east)), BoundsPaddingPx)
     }
 }
+
+/** The selected marker's size, the largest a marker gets; photos are loaded at this size. */
+private val SelectedBadgeSize = 52.dp
 
 /** Space around framed markers, in pixels (the API takes pixels). */
 private const val BoundsPaddingPx = 160

@@ -17,6 +17,9 @@ sealed interface Route : NavKey {
     data object CreateCollection : Route
 
     @Serializable
+    data class EditCollection(val collectionId: String) : Route
+
+    @Serializable
     data object Profile : Route
 
     @Serializable

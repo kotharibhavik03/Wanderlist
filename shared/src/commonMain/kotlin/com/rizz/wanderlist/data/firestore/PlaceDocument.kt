@@ -47,7 +47,9 @@ internal data class PlaceDocument(
 internal data class MarkerDocument(
     val type: String = TYPE_COLLECTION,
     val iconKey: String? = null,
-    val photoId: String? = null
+    val photoId: String? = null,
+    /** The marker photo's download URL, copied from its (shared) photo document when saved. */
+    val photoUrl: String? = null
 ) {
     companion object {
         const val TYPE_COLLECTION = "COLLECTION"
@@ -141,14 +143,14 @@ internal fun PlaceDocument.withoutMember(email: String, updatedAt: Long) = copy(
 
 private fun MarkerDocument.toDomain(): MarkerStyle = when (type) {
     MarkerDocument.TYPE_ICON -> iconKey?.let { MarkerStyle.Icon(it) } ?: MarkerStyle.CollectionDefault
-    MarkerDocument.TYPE_PHOTO -> photoId?.let { MarkerStyle.Photo(it) } ?: MarkerStyle.CollectionDefault
+    MarkerDocument.TYPE_PHOTO -> photoId?.let { MarkerStyle.Photo(it, photoUrl) } ?: MarkerStyle.CollectionDefault
     else -> MarkerStyle.CollectionDefault
 }
 
 private fun MarkerStyle.toDocument(): MarkerDocument = when (this) {
     MarkerStyle.CollectionDefault -> MarkerDocument(MarkerDocument.TYPE_COLLECTION)
     is MarkerStyle.Icon -> MarkerDocument(MarkerDocument.TYPE_ICON, iconKey = iconKey)
-    is MarkerStyle.Photo -> MarkerDocument(MarkerDocument.TYPE_PHOTO, photoId = photoId)
+    is MarkerStyle.Photo -> MarkerDocument(MarkerDocument.TYPE_PHOTO, photoId = photoId, photoUrl = url)
 }
 
 private fun MemberDocument.toDomain() = PlaceMember(

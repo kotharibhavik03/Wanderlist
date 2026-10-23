@@ -3,34 +3,42 @@ package com.rizz.wanderlist.domain.repository
 import com.rizz.wanderlist.domain.model.NewPlace
 import com.rizz.wanderlist.domain.model.Place
 import com.rizz.wanderlist.domain.model.PlaceDetails
+import com.rizz.wanderlist.domain.model.PlacePhoto
 import com.rizz.wanderlist.domain.model.SharedPlace
 import kotlinx.coroutines.flow.Flow
 
 interface PlaceRepository {
     /**
-     * Places of one collection the signed-in user may see, newest first.
-     * The repository applies visibility: other people's private photos are already removed.
+     * Places of one collection the signed-in user may see, newest first, with their photos
+     * (see [observePhotos] for which).
      */
     fun observePlaces(collectionId: String): Flow<List<Place>>
 
     /**
-     * One place, or null when it doesn't exist or the signed-in user may not see it
-     * (not the owner and not a member). Same photo visibility as [observePlaces].
+     * One place with its photos, or null when it doesn't exist or the signed-in user may not
+     * see it (not the owner and not a member).
      */
     fun observePlace(placeId: String): Flow<Place?>
 
     /**
-     * Every place the signed-in user can see, own or shared with them, newest first.
-     * This is what the map shows. Same photo visibility as [observePlaces].
+     * Every place the signed-in user can see, own or shared with them, newest first. This is
+     * what the map shows. Photos are not loaded ([Place.photos] is empty); a photo marker
+     * carries its own URL. Use [observePhotos] for one place's photos.
      */
     fun observeVisiblePlaces(): Flow<List<Place>>
+
+    /**
+     * The photos of a place the signed-in user may see, oldest first: its shared photos plus
+     * their own private ones. Other people's private photos never leave the server.
+     */
+    fun observePhotos(placeId: String): Flow<List<PlacePhoto>>
 
     /** How many places each collection holds, keyed by collection id. Missing key means none. */
     fun observePlaceCounts(): Flow<Map<String, Int>>
 
     /**
      * Places other people own where the signed-in user is a member, newest first.
-     * Empty when signed out.
+     * Empty when signed out. Photos are not loaded, as in [observeVisiblePlaces].
      */
     fun observeSharedWithMe(): Flow<List<SharedPlace>>
 

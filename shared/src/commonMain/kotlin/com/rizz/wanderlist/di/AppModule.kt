@@ -10,17 +10,17 @@ import com.rizz.wanderlist.domain.repository.CollectionRepository
 import com.rizz.wanderlist.domain.repository.PhotoStorage
 import com.rizz.wanderlist.domain.repository.PlaceRepository
 import com.rizz.wanderlist.domain.repository.ProfileRepository
-import com.rizz.wanderlist.domain.usecase.CreateCollectionUseCase
 import com.rizz.wanderlist.domain.usecase.DeleteCollectionUseCase
 import com.rizz.wanderlist.domain.usecase.ObserveCollectionSummariesUseCase
+import com.rizz.wanderlist.domain.usecase.SaveCollectionUseCase
 import com.rizz.wanderlist.domain.usecase.SavePlaceUseCase
 import com.rizz.wanderlist.domain.usecase.SearchLocationsUseCase
 import com.rizz.wanderlist.domain.usecase.UpdatePlaceUseCase
 import com.rizz.wanderlist.views.auth.AuthViewModel
 import com.rizz.wanderlist.views.auth.SignInViewModel
 import com.rizz.wanderlist.views.collection.CollectionDetailViewModel
+import com.rizz.wanderlist.views.collection.CollectionFormViewModel
 import com.rizz.wanderlist.views.collection.CollectionsViewModel
-import com.rizz.wanderlist.views.collection.CreateCollectionViewModel
 import com.rizz.wanderlist.views.home.HomeViewModel
 import com.rizz.wanderlist.views.mapPicker.MapPickerViewModel
 import com.rizz.wanderlist.views.place.AddPlaceViewModel
@@ -37,11 +37,12 @@ val appModule = module {
     single { Firebase.storage }
     single<PhotoStorage> { FirebasePhotoStorage(get()) }
     single<CollectionRepository> { FirestoreCollectionRepository(get(), get()) }
-    factory { CreateCollectionUseCase(get()) }
+    factory { SaveCollectionUseCase(get()) }
     factory { DeleteCollectionUseCase(get(), get()) }
     factory { ObserveCollectionSummariesUseCase(get(), get()) }
     viewModel { CollectionsViewModel(get(), get(), get()) }
-    viewModel { CreateCollectionViewModel(get()) }
+    // Null id: a new collection; otherwise the collection to edit.
+    viewModel { params -> CollectionFormViewModel(params.getOrNull(), get(), get()) }
 
     single<AuthRepository> { KmpAuthRepository() }
     single<ProfileRepository> { FirestoreProfileRepository(get()) }

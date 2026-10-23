@@ -107,6 +107,11 @@ service cloud.firestore {
               || (data.get('visitedOn', null) == null && data.get('rating', null) == null))
           && data.notes is string && data.notes.size() <= 2000
           && data.marker is map
+          && data.marker.keys().hasOnly(['type', 'iconKey', 'photoId', 'photoUrl'])
+          // A photo marker's URL, copied from one of the place's shared photos by the app.
+          && (data.marker.get('photoUrl', null) == null
+              || (data.marker.photoUrl is string && data.marker.photoUrl.size() <= 2000
+                  && data.marker.photoUrl.matches('https://firebasestorage[.]googleapis[.]com/.*')))
           && data.members is list && data.members.size() <= 50
           && data.memberEmails is list && data.memberEmails.size() == data.members.size()
           && data.collaboratorEmails is list
@@ -125,6 +130,8 @@ service cloud.firestore {
 
       allow create: if signedIn()
         && request.resource.data.ownerId == request.auth.uid
+        // The owner already has the place, so they can't also be one of its members.
+        && !(myEmail() in request.resource.data.memberEmails)
         // The owner email shown to invitees must be the creator's own sign-in email.
         && (request.resource.data.get('ownerEmail', null) == null
             || request.resource.data.ownerEmail == myEmail())
@@ -138,8 +145,9 @@ service cloud.firestore {
         && request.resource.data.get('ownerEmail', null) == resource.data.get('ownerEmail', null)
         && request.resource.data.createdAt == resource.data.createdAt
         && (
-          // Owner: anything; a different collection must also be theirs.
+          // Owner: anything; a different collection must also be theirs, and they can't be a member.
           (resource.data.ownerId == request.auth.uid
+            && !(myEmail() in request.resource.data.memberEmails)
             && (request.resource.data.collectionId == resource.data.collectionId
                 || ownsCollection(request.resource.data.collectionId)))
           // Collaborator: the place's own details only.

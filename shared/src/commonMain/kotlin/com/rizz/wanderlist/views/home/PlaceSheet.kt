@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.rizz.wanderlist.domain.model.PlacePhoto
 import com.rizz.wanderlist.domain.model.SelectedLocation
 import com.rizz.wanderlist.util.formatCoordinates
 import com.rizz.wanderlist.util.formatDate
@@ -49,6 +50,8 @@ import com.rizz.wanderlist.views.place.RatingStars
 @Composable
 internal fun PlaceSheetContent(
     item: HomePlace,
+    /** The place's photos (the map's places don't carry them). */
+    photos: List<PlacePhoto>,
     /** Space at the bottom kept clear for the floating bottom bar. */
     bottomPadding: Dp,
     /** Reports the summary's height, which sets how far the sheet peeks. */
@@ -79,7 +82,7 @@ internal fun PlaceSheetContent(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                PlaceMarker(place.markerStyle, item.collection, size = 48.dp)
+                PlaceMarker(place.markerStyle, item.collection, place.markerPhotoUrl, size = 48.dp)
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         place.displayName,
@@ -134,7 +137,7 @@ internal fun PlaceSheetContent(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            PhotosSection(place.photos)
+            PhotosSection(photos)
             DetailsCard(place, item.collection)
         }
     }

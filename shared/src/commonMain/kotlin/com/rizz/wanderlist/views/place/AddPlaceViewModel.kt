@@ -21,7 +21,7 @@ import com.rizz.wanderlist.domain.repository.PlaceRepository
 import com.rizz.wanderlist.domain.usecase.ObserveCollectionSummariesUseCase
 import com.rizz.wanderlist.domain.usecase.SavePlaceUseCase
 import com.rizz.wanderlist.domain.usecase.UpdatePlaceUseCase
-import com.rizz.wanderlist.util.isValidEmail
+import com.rizz.wanderlist.domain.usecase.memberEmailProblem
 import com.rizz.wanderlist.util.pluralize
 import com.rizz.wanderlist.util.resultOf
 import kotlin.uuid.ExperimentalUuidApi
@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -127,6 +128,15 @@ class AddPlaceViewModel(
     /** Work that belongs to the current draft (compressing, saving); cancelled when it's cleared. */
     private val draftWork = mutableListOf<Job>()
 
+    /**
+     * The signed-in user's email, lowercase. Only the owner manages a place's people, so this is
+     * the owner's email whenever the People section is shown.
+     */
+    val myEmail: StateFlow<String?> =
+        authRepository.currentUser
+            .map { it?.email?.lowercase() }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     val collections: StateFlow<List<CollectionSummary>> =
         observeCollectionSummaries()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -168,7 +178,8 @@ class AddPlaceViewModel(
                         rating = place.rating,
                         selectedCollectionId = place.collectionId,
                         markerStyle = place.markerStyle,
-                        members = place.members
+                        // Older versions let owners add themselves; drop that so the save is accepted.
+                        members = place.members.filterNot { it.email == user?.email?.lowercase() }
                     )
                 }
             }
@@ -288,11 +299,11 @@ class AddPlaceViewModel(
         if (allowed) state.copy(markerStyle = style) else state
     }
 
+    /** Adds a person. The dialog already refuses these cases; this keeps the draft valid regardless. */
     fun onMemberAdded(email: String, role: MemberRole) {
         val normalized = email.trim().lowercase()
-        if (!normalized.isValidEmail()) return
         _uiState.update { state ->
-            if (state.members.any { it.email == normalized }) {
+            if (memberEmailProblem(normalized, myEmail.value, state.members) != null) {
                 state
             } else {
                 state.copy(members = state.members + PlaceMember(normalized, role))

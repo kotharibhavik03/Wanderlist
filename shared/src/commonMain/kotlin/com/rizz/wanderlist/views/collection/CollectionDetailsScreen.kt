@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,13 +17,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -53,9 +54,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -64,6 +63,9 @@ import com.rizz.wanderlist.domain.model.PlaceCollection
 import com.rizz.wanderlist.util.formatCoordinates
 import com.rizz.wanderlist.util.formatDate
 import com.rizz.wanderlist.util.pluralize
+import com.rizz.wanderlist.views.photo.PhotoTile
+import com.rizz.wanderlist.views.photo.PhotoViewer
+import com.rizz.wanderlist.views.photo.ViewerPhoto
 import com.rizz.wanderlist.views.place.MarkerBadge
 import com.rizz.wanderlist.views.place.PlaceMarker
 import com.rizz.wanderlist.views.place.PlaceStatusBadge
@@ -77,6 +79,7 @@ fun CollectionDetailRoute(
     onBack: () -> Unit,
     onPlaceClick: (placeId: String) -> Unit,
     onAddPlace: () -> Unit,
+    onEdit: () -> Unit,
     onDeleted: () -> Unit
 ) {
     val viewModel: CollectionDetailViewModel =
@@ -97,6 +100,7 @@ fun CollectionDetailRoute(
         onBack = onBack,
         onPlaceClick = onPlaceClick,
         onAddPlace = onAddPlace,
+        onEdit = onEdit,
         onDeleteConfirmed = viewModel::onDeleteConfirmed,
         onErrorShown = viewModel::onErrorShown
     )
@@ -108,6 +112,7 @@ fun CollectionDetailScreen(
     onBack: () -> Unit,
     onPlaceClick: (placeId: String) -> Unit,
     onAddPlace: () -> Unit,
+    onEdit: () -> Unit,
     onDeleteConfirmed: () -> Unit,
     onErrorShown: () -> Unit
 ) {
@@ -142,6 +147,14 @@ fun CollectionDetailScreen(
                                 Icon(Icons.Default.MoreVert, contentDescription = "More options")
                             }
                             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Edit collection") },
+                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                                    onClick = {
+                                        showMenu = false
+                                        onEdit()
+                                    }
+                                )
                                 DropdownMenuItem(
                                     text = { Text("Delete collection", color = MaterialTheme.colorScheme.error) },
                                     leadingIcon = {
@@ -293,7 +306,7 @@ private fun PlaceCard(place: Place, collection: PlaceCollection, onClick: () -> 
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            PlaceMarker(place.markerStyle, collection)
+            PlaceMarker(place.markerStyle, collection, place.markerPhotoUrl)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     place.displayName,
@@ -329,43 +342,50 @@ private fun PlaceCard(place: Place, collection: PlaceCollection, onClick: () -> 
     }
 }
 
+/**
+ * Every photo in the collection's places as a gallery: three square, sharp-cornered tiles per
+ * row with thin gaps, like a phone's photo grid. Tapping one opens the viewer, captioned with
+ * its place.
+ */
 @Composable
 private fun PhotosTab(photos: List<CollectionPhoto>) {
+    var viewing by rememberSaveable { mutableStateOf<Int?>(null) }
     if (photos.isEmpty()) {
         EmptyState("No photos yet", "Photos you add to places in this collection appear here.")
         return
     }
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(110.dp),
+        columns = GridCells.Fixed(PhotoGridColumns),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 96.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        // The bottom leaves room to scroll the last row clear of the Add place button.
+        contentPadding = PaddingValues(start = PhotoGridGap, end = PhotoGridGap, top = PhotoGridGap, bottom = 96.dp),
+        horizontalArrangement = Arrangement.spacedBy(PhotoGridGap),
+        verticalArrangement = Arrangement.spacedBy(PhotoGridGap)
     ) {
-        items(photos, key = { "${it.placeId}/${it.photo.id}" }) { item ->
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .size(110.dp)
-                    .clip(MaterialTheme.shapes.small)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .semantics { contentDescription = "Photo from ${item.placeName}" },
-                contentAlignment = Alignment.Center
-            ) {
-                // Real image loading (Coil) arrives with the photo step.
-                Icon(Icons.Default.Image, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (item.photo.isPrivate) {
-                    Icon(
-                        Icons.Default.Lock,
-                        contentDescription = "Private",
-                        modifier = Modifier.align(Alignment.BottomStart).padding(6.dp).size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
+        itemsIndexed(photos, key = { _, item -> "${item.placeId}/${item.photo.id}" }) { index, item ->
+            PhotoTile(
+                photo = item.photo,
+                description = "Photo from ${item.placeName}",
+                onClick = { viewing = index },
+                // Square tiles that fill their grid cell.
+                modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+                shape = RectangleShape
+            )
         }
     }
+    viewing?.let { index ->
+        PhotoViewer(
+            photos = photos.map { ViewerPhoto(it.photo, caption = it.placeName) },
+            initialIndex = index,
+            onDismiss = { viewing = null }
+        )
+    }
 }
+
+private const val PhotoGridColumns = 3
+
+/** Gap between photo tiles, and around the grid. */
+private val PhotoGridGap = 3.dp
 
 @Composable
 private fun EmptyState(title: String, message: String) {

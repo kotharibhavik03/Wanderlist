@@ -17,6 +17,7 @@ fun AddPlaceRoute(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val collections by viewModel.collections.collectAsStateWithLifecycle()
+    val myEmail by viewModel.myEmail.collectAsStateWithLifecycle()
     val currentOnSaved by rememberUpdatedState(onSaved)
     // Asks for at most what's left of the limit (a picker can't take back extra choices).
     val photoPicker = rememberPhotoPicker(
@@ -35,6 +36,7 @@ fun AddPlaceRoute(
     AddPlaceScreen(
         uiState = uiState,
         collections = collections,
+        myEmail = myEmail,
         actions = AddPlaceActions(
             onBack = onBack,
             onOpenMapPicker = onOpenMapPicker,

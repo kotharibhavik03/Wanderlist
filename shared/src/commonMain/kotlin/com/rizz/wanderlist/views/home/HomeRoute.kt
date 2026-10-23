@@ -109,8 +109,11 @@ fun HomeRoute(
     viewModel: HomeViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val selectedPlacePhotos by viewModel.selectedPlacePhotos.collectAsStateWithLifecycle()
     HomeScreen(
         uiState = uiState,
+        selectedPlacePhotos = selectedPlacePhotos,
+        onSelectedPlaceChanged = viewModel::onSelectedPlaceChanged,
         bottomBarPadding = bottomBarPadding,
         onAddClick = onAddClick,
         onPlaceClick = onPlaceClick,
@@ -125,6 +128,9 @@ fun HomeRoute(
         onPermissionAnswered = viewModel::onPermissionAnswered,
         onPermissionRefused = viewModel::onPermissionRefused,
         onMyLocation = viewModel::goToMyLocation,
+        claimStartLocation = viewModel::claimStartLocation,
+        onLocateAtStart = viewModel::locateAtStart,
+        onStartLocationUnavailable = viewModel::onStartLocationUnavailable,
         onMyLocationShown = viewModel::onMyLocationShown,
         onMessageShown = viewModel::onMessageShown
     )
@@ -154,6 +160,8 @@ private sealed interface SheetSubject {
 @Composable
 fun HomeScreen(
     uiState: HomeUiState,
+    selectedPlacePhotos: SelectedPlacePhotos,
+    onSelectedPlaceChanged: (placeId: String?) -> Unit,
     bottomBarPadding: Dp,
     onAddClick: () -> Unit,
     onPlaceClick: (placeId: String) -> Unit,
@@ -168,6 +176,10 @@ fun HomeScreen(
     onPermissionAnswered: (granted: Boolean) -> Unit,
     onPermissionRefused: () -> Unit,
     onMyLocation: () -> Unit,
+    /** True the first time Home appears in a session: then show the user's position. */
+    claimStartLocation: () -> Boolean,
+    onLocateAtStart: () -> Unit,
+    onStartLocationUnavailable: () -> Unit,
     onMyLocationShown: () -> Unit,
     onMessageShown: () -> Unit
 ) {
@@ -187,6 +199,15 @@ fun HomeScreen(
         onAllowed = onMyLocation,
         onRefused = onPermissionRefused
     )
+    // Start on the user's position, once per session, asking for location access if needed.
+    // A refusal isn't an error here: the map frames the places instead.
+    val locateAtStart = rememberMyLocationClick(
+        hasPermission = hasLocationPermission,
+        onPermissionAnswered = onPermissionAnswered,
+        onAllowed = onLocateAtStart,
+        onRefused = onStartLocationUnavailable
+    )
+    LaunchedEffect(Unit) { if (claimStartLocation()) locateAtStart() }
 
     // Height of the floating controls, measured from the top of the screen. The map keeps its
     // framing and Google's logo clear of them, and search results open just below them.
@@ -198,6 +219,7 @@ fun HomeScreen(
 
     var selectedPlaceId by rememberSaveable { mutableStateOf<String?>(null) }
     val selected = uiState.places.firstOrNull { it.place.id == selectedPlaceId }
+    LaunchedEffect(selected?.place?.id) { onSelectedPlaceChanged(selected?.place?.id) }
     val picked = uiState.pickedLocation
     val subject: SheetSubject? = when {
         selected != null -> SheetSubject.SavedPlace(selected)
@@ -283,6 +305,7 @@ fun HomeScreen(
                 when (shown) {
                     is SheetSubject.SavedPlace -> PlaceSheetContent(
                         item = shown.item,
+                        photos = selectedPlacePhotos.photos.takeIf { selectedPlacePhotos.placeId == shown.item.place.id }.orEmpty(),
                         bottomPadding = bottomBarPadding,
                         onSummaryHeightChanged = onMeasured,
                         detailsAlpha = { detailsAlpha },
@@ -312,6 +335,7 @@ fun HomeScreen(
                 selectedPlaceId = selectedPlaceId,
                 pin = picked,
                 myLocation = uiState.myLocation,
+                startPosition = uiState.startPosition,
                 onMyLocationShown = onMyLocationShown,
                 showMyLocation = uiState.hasLocationPermission,
                 onMarkerClick = ::selectPlace,
@@ -578,7 +602,7 @@ private fun SearchResults(
                                 overflow = TextOverflow.Ellipsis
                             )
                         },
-                        leadingContent = { PlaceMarker(place.markerStyle, item.collection) },
+                        leadingContent = { PlaceMarker(place.markerStyle, item.collection, place.markerPhotoUrl) },
                         trailingContent = {
                             Text(
                                 item.collection?.name ?: "Shared",

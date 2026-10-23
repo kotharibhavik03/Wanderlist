@@ -81,6 +81,8 @@ import com.rizz.wanderlist.domain.model.PlaceCollection
 import com.rizz.wanderlist.domain.model.PlaceMember
 import com.rizz.wanderlist.domain.model.PlaceStatus
 import com.rizz.wanderlist.domain.model.SelectedLocation
+import com.rizz.wanderlist.domain.usecase.MemberEmailProblem
+import com.rizz.wanderlist.domain.usecase.memberEmailProblem
 import com.rizz.wanderlist.util.formatCoordinates
 import com.rizz.wanderlist.util.formatDate
 import com.rizz.wanderlist.util.pluralize
@@ -110,11 +112,11 @@ class AddPlaceActions(
 fun AddPlaceScreen(
     uiState: AddPlaceUiState,
     collections: List<CollectionSummary>,
+    myEmail: String?,
     actions: AddPlaceActions
 ) {
     var showCollectionSheet by rememberSaveable { mutableStateOf(false) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
-    var showAddPerson by rememberSaveable { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(uiState.errorMessage) {
@@ -183,7 +185,8 @@ fun AddPlaceScreen(
                     CollectionSection(selectedSummary, markerBrush) { showCollectionSheet = true }
                     PeopleSection(
                         members = uiState.members,
-                        onAdd = { showAddPerson = true },
+                        problemFor = { email -> memberEmailProblem(email, myEmail, uiState.members) },
+                        onAdd = actions.onMemberAdded,
                         onRemove = actions.onMemberRemoved
                     )
                 }
@@ -220,16 +223,6 @@ fun AddPlaceScreen(
             },
             dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } }
         ) { DatePicker(state = pickerState) }
-    }
-
-    if (showAddPerson) {
-        AddPersonDialog(
-            onDismiss = { showAddPerson = false },
-            onAdd = { email, role ->
-                actions.onMemberAdded(email, role)
-                showAddPerson = false
-            }
-        )
     }
 }
 
@@ -575,9 +568,11 @@ private fun CollectionSection(
 @Composable
 private fun PeopleSection(
     members: List<PlaceMember>,
-    onAdd: () -> Unit,
+    problemFor: (email: String) -> MemberEmailProblem?,
+    onAdd: (email: String, role: MemberRole) -> Unit,
     onRemove: (String) -> Unit
 ) {
+    var adding by rememberSaveable { mutableStateOf(false) }
     Section(
         "People",
         "Add people by Google email. They see only this place, never the rest of your collection."
@@ -618,10 +613,21 @@ private fun PeopleSection(
                 }
             }
         }
-        OutlinedButton(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Default.PersonAdd, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("Add person")
+        if (adding) {
+            AddPersonForm(
+                problemFor = problemFor,
+                onCancel = { adding = false },
+                onAdd = { email, role ->
+                    onAdd(email, role)
+                    adding = false
+                }
+            )
+        } else {
+            OutlinedButton(onClick = { adding = true }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.PersonAdd, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Add person")
+            }
         }
     }
 }

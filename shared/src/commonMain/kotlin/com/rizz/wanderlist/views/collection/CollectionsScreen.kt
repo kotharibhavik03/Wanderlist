@@ -188,7 +188,7 @@ private fun SharedPlaceCard(item: SharedPlaceItem, onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            PlaceMarker(place.markerStyle, collection = null)
+            PlaceMarker(place.markerStyle, collection = null, photoUrl = place.markerPhotoUrl)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     place.displayName,

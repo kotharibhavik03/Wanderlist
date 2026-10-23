@@ -15,10 +15,11 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.Image
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
 import com.rizz.wanderlist.domain.model.MarkerStyle
 import com.rizz.wanderlist.domain.model.PlaceCollection
 
@@ -56,19 +57,31 @@ internal fun MarkerBadge(emoji: String, brush: Brush, size: Dp = 44.dp) {
 internal fun markerEmoji(key: String): String =
     markerIcons.firstOrNull { it.first == key }?.second ?: "📍"
 
-/** One marker renderer, reused by the list now and by the map later. */
+/**
+ * A place's marker, used everywhere a place is shown (lists, sheet, detail, map).
+ * A photo marker draws [photoUrl] (pass `place.markerPhotoUrl`), or [loadedPhoto] when the
+ * caller already loaded it (the map does: its markers are rendered to a bitmap once). Without
+ * either it falls back to the collection's badge.
+ */
 @Composable
-internal fun PlaceMarker(style: MarkerStyle, collection: PlaceCollection?, size: Dp = 44.dp) {
+internal fun PlaceMarker(
+    style: MarkerStyle,
+    collection: PlaceCollection?,
+    photoUrl: String?,
+    size: Dp = 44.dp,
+    loadedPhoto: Painter? = null
+) {
     val brush = collectionBrush(collection?.colors.orEmpty(), MaterialTheme.colorScheme.primary)
-    when (style) {
-        MarkerStyle.CollectionDefault -> MarkerBadge(collection?.icon ?: "📍", brush, size)
-        is MarkerStyle.Icon -> MarkerBadge(markerEmoji(style.iconKey), brush, size)
-        is MarkerStyle.Photo -> Box(
-            modifier = Modifier
-                .size(size)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center
-        ) { Icon(Icons.Default.Image, contentDescription = null) }
+    val photoModifier = Modifier
+        .size(size)
+        .clip(CircleShape)
+        .background(MaterialTheme.colorScheme.surfaceVariant)
+    when {
+        style is MarkerStyle.Photo && loadedPhoto != null ->
+            Image(loadedPhoto, contentDescription = null, contentScale = ContentScale.Crop, modifier = photoModifier)
+        style is MarkerStyle.Photo && photoUrl != null ->
+            AsyncImage(photoUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = photoModifier)
+        style is MarkerStyle.Icon -> MarkerBadge(markerEmoji(style.iconKey), brush, size)
+        else -> MarkerBadge(collection?.icon ?: "📍", brush, size)
     }
 }

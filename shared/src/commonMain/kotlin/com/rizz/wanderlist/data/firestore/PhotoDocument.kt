@@ -22,7 +22,8 @@ internal fun PhotoDocument.toDomain(id: String) = PlacePhoto(
     id = id,
     uploaderId = uploaderId,
     url = url,
-    isPrivate = isPrivate
+    isPrivate = isPrivate,
+    createdAtEpochMillis = createdAt
 )
 
 /**

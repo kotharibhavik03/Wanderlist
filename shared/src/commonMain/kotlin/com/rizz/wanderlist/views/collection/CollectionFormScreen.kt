@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -20,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,14 +53,17 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rizz.wanderlist.domain.model.PlaceCollection
 import com.rizz.wanderlist.domain.usecase.CollectionError
-import com.rizz.wanderlist.domain.usecase.CreateCollectionUseCase
+import com.rizz.wanderlist.domain.usecase.SaveCollectionUseCase
 import org.koin.compose.viewmodel.koinViewModel
+import org.koin.core.parameter.parametersOf
 
+/** New collection when [collectionId] is null, otherwise edits that collection. */
 @Composable
-fun CreateCollectionRoute(
+fun CollectionFormRoute(
+    collectionId: String?,
     onBack: () -> Unit,
     onSaved: () -> Unit,
-    viewModel: CreateCollectionViewModel = koinViewModel()
+    viewModel: CollectionFormViewModel = koinViewModel { parametersOf(collectionId) }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val currentOnSaved by rememberUpdatedState(onSaved)
@@ -65,12 +71,12 @@ fun CreateCollectionRoute(
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
-                CreateCollectionEvent.Saved -> currentOnSaved()
+                CollectionFormEvent.Saved -> currentOnSaved()
             }
         }
     }
 
-    CreateCollectionScreen(
+    CollectionFormScreen(
         uiState = uiState,
         onBack = onBack,
         onNameChange = viewModel::onNameChange,
@@ -83,8 +89,8 @@ fun CreateCollectionRoute(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateCollectionScreen(
-    uiState: CreateCollectionUiState,
+fun CollectionFormScreen(
+    uiState: CollectionFormUiState,
     onBack: () -> Unit,
     onNameChange: (String) -> Unit,
     onIconSelected: (String) -> Unit,
@@ -104,7 +110,7 @@ fun CreateCollectionScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("New collection") },
+                title = { Text(if (uiState.isEditing) "Edit collection" else "New collection") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -113,46 +119,76 @@ fun CreateCollectionScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+        when {
+            uiState.isLoading -> Box(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center
+            ) { CircularProgressIndicator() }
+
+            uiState.notFound -> Box(
+                modifier = Modifier.fillMaxSize().padding(padding).padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) { Text("This collection was deleted.") }
+
+            else -> CollectionForm(uiState, padding, onNameChange, onIconSelected, onColorToggled, onSaveClick)
+        }
+    }
+}
+
+@Composable
+private fun CollectionForm(
+    uiState: CollectionFormUiState,
+    padding: PaddingValues,
+    onNameChange: (String) -> Unit,
+    onIconSelected: (String) -> Unit,
+    onColorToggled: (Long) -> Unit,
+    onSaveClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .padding(padding)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
+        CollectionCard(
+            collection = PlaceCollection(
+                id = "preview",
+                name = uiState.name.ifBlank { "Collection name" },
+                icon = uiState.icon,
+                colors = uiState.colors
+            ),
+            placeCount = uiState.placeCount
+        )
+
+        OutlinedTextField(
+            value = uiState.name,
+            onValueChange = onNameChange,
+            label = { Text("Collection name") },
+            singleLine = true,
+            isError = uiState.error != null,
+            supportingText = { uiState.error?.let { Text(it.toMessage()) } },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        SectionTitle("Icon")
+        IconPicker(selected = uiState.icon, onSelect = onIconSelected)
+
+        SectionTitle("Colours (pick one or more)")
+        ColorPicker(selected = uiState.colors, onToggle = onColorToggled)
+
+        Button(
+            onClick = onSaveClick,
+            enabled = uiState.canSave,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            CollectionCard(
-                collection = PlaceCollection(
-                    id = "preview",
-                    name = uiState.name.ifBlank { "Collection name" },
-                    icon = uiState.icon,
-                    colors = uiState.colors
-                ),
-                placeCount = 0
+            Text(
+                when {
+                    uiState.isSaving -> "Saving…"
+                    uiState.isEditing -> "Save changes"
+                    else -> "Save collection"
+                }
             )
-
-            OutlinedTextField(
-                value = uiState.name,
-                onValueChange = onNameChange,
-                label = { Text("Collection name") },
-                singleLine = true,
-                isError = uiState.error != null,
-                supportingText = { uiState.error?.let { Text(it.toMessage()) } },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            SectionTitle("Icon")
-            IconPicker(selected = uiState.icon, onSelect = onIconSelected)
-
-            SectionTitle("Colours (pick one or more)")
-            ColorPicker(selected = uiState.colors, onToggle = onColorToggled)
-
-            Button(
-                onClick = onSaveClick,
-                enabled = uiState.canSave,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (uiState.isSaving) "Saving…" else "Save collection")
-            }
         }
     }
 }
@@ -251,6 +287,6 @@ private fun contrastingTint(background: Color): Color =
 private fun CollectionError.toMessage(): String = when (this) {
     CollectionError.NameBlank -> "Please enter a name"
     CollectionError.NameTooLong ->
-        "Use ${CreateCollectionUseCase.MAX_NAME_LENGTH} characters or fewer"
+        "Use ${SaveCollectionUseCase.MAX_NAME_LENGTH} characters or fewer"
     CollectionError.NoColor -> "Pick at least one colour"
 }

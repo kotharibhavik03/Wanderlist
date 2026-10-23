@@ -23,6 +23,15 @@ data class Place(
     val updatedAtEpochMillis: Long
 ) {
     val displayName: String get() = customName.ifBlank { actualName }
+
+    /**
+     * The photo to draw as this place's marker, or null to fall back to the collection's badge.
+     * Places store the marker photo's URL; older ones only its id, found among [photos] when loaded.
+     */
+    val markerPhotoUrl: String?
+        get() = (markerStyle as? MarkerStyle.Photo)?.let { marker ->
+            marker.url ?: photos.firstOrNull { it.id == marker.photoId && !it.isPrivate }?.url
+        }
 }
 
 enum class PlaceStatus { WISHLIST, VISITED }
@@ -31,7 +40,8 @@ data class PlacePhoto(
     val id: String,
     val uploaderId: String,
     val url: String,
-    val isPrivate: Boolean
+    val isPrivate: Boolean,
+    val createdAtEpochMillis: Long
 )
 
 enum class MemberRole {
@@ -50,5 +60,9 @@ data class PlaceMember(
 sealed interface MarkerStyle {
     data object CollectionDefault : MarkerStyle
     data class Icon(val iconKey: String) : MarkerStyle
-    data class Photo(val photoId: String) : MarkerStyle
+    /**
+     * One of the place's shared photos. [url] is filled in when the place is saved, so the map
+     * can draw the marker without loading the place's photos; null while it's only a draft.
+     */
+    data class Photo(val photoId: String, val url: String? = null) : MarkerStyle
 }

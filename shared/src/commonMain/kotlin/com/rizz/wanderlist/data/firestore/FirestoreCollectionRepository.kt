@@ -63,6 +63,25 @@ class FirestoreCollectionRepository(
         return document.toDomain(reference.id)
     }
 
+    override suspend fun updateCollection(
+        collectionId: String,
+        name: String,
+        icon: String,
+        colors: List<Long>
+    ): PlaceCollection {
+        val owner = authRepository.currentUser.first() ?: error("You need to be signed in to do that.")
+        val reference = collections.document(collectionId)
+        val snapshot = reference.get()
+        check(snapshot.exists) { "This collection no longer exists." }
+        val current = snapshot.data<CollectionDocument>()
+        // firestore.rules enforces this too; checking here gives a clear message.
+        check(current.ownerId == owner.id) { "Only the owner can edit this collection." }
+        // Owner and creation time stay as they are.
+        val updated = current.copy(name = name, icon = icon, colors = colors)
+        reference.set(updated) { encodeDefaults = true }
+        return updated.toDomain(collectionId)
+    }
+
     override suspend fun deleteCollection(collectionId: String) {
         collections.document(collectionId).delete()
     }
