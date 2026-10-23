@@ -25,12 +25,9 @@ import com.rizz.wanderlist.domain.usecase.ObserveCollectionSummariesUseCase
 import com.rizz.wanderlist.domain.usecase.SavePlaceUseCase
 import com.rizz.wanderlist.domain.usecase.UpdatePlaceUseCase
 import com.rizz.wanderlist.domain.usecase.memberEmailProblem
-import com.rizz.wanderlist.util.pluralize
-import com.rizz.wanderlist.util.resultOf
 import com.rizz.wanderlist.views.photo.DraftPhoto
+import com.rizz.wanderlist.views.photo.DraftPhotos
 import com.rizz.wanderlist.views.photo.PhotoUploadProgress
-import kotlin.uuid.ExperimentalUuidApi
-import kotlin.uuid.Uuid
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -125,7 +122,7 @@ class AddPlaceViewModel(
     private val updatePlace: UpdatePlaceUseCase,
     private val placeRepository: PlaceRepository,
     private val authRepository: AuthRepository,
-    private val photoCompressor: PhotoCompressor
+    photoCompressor: PhotoCompressor
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddPlaceUiState())
@@ -133,6 +130,12 @@ class AddPlaceViewModel(
 
     private val _events = Channel<AddPlaceEvent>(Channel.BUFFERED)
     val events: Flow<AddPlaceEvent> = _events.receiveAsFlow()
+
+    private val draftPhotos = DraftPhotos(
+        compressor = photoCompressor,
+        updatePhotos = { transform -> _uiState.update { it.copy(photos = transform(it.photos)) } },
+        showMessage = { message -> _uiState.update { it.copy(errorMessage = message) } }
+    )
 
     /** Work that belongs to the current draft (compressing, saving); cancelled when it's cleared. */
     private val draftWork = mutableListOf<Job>()
@@ -232,55 +235,10 @@ class AddPlaceViewModel(
     fun onCollectionSelected(collectionId: String) =
         _uiState.update { it.copy(selectedCollectionId = collectionId) }
 
-    /**
-     * Adds what the photo picker returned. Each photo shows up at once with a spinner and is
-     * compressed in the background, one at a time to keep memory low.
-     */
+    /** Adds what the photo picker returned; each photo is compressed in the background. */
     fun onPhotosPicked(sources: List<String>) {
-        if (sources.isEmpty()) return
-        val picked = sources.distinct()
-        val accepted = picked.take(_uiState.value.photoRoom)
-        val drafts = accepted.map { DraftPhoto(id = newPhotoId()) }
-        _uiState.update { state ->
-            state.copy(
-                photos = state.photos + drafts,
-                errorMessage = if (accepted.size < picked.size) {
-                    "Added ${accepted.size} of ${picked.size} photos: you can add up to " +
-                            "$MAX_PHOTOS_PER_SAVE at a time."
-                } else {
-                    state.errorMessage
-                }
-            )
-        }
-
-        launchDraftWork {
-            var failed = 0
-            drafts.zip(accepted).forEach { (draft, source) ->
-                resultOf { photoCompressor.compress(source) }.fold(
-                    onSuccess = { path -> attachCompressed(draft.id, path) },
-                    onFailure = {
-                        failed++
-                        _uiState.update { state -> state.copy(photos = state.photos.filterNot { it.id == draft.id }) }
-                    }
-                )
-            }
-            if (failed > 0) {
-                _uiState.update {
-                    it.copy(errorMessage = "${pluralize(failed, "photo", "photos")} couldn't be opened.")
-                }
-            }
-        }
-    }
-
-    /** Puts a compressed file on its draft photo, or deletes it if the photo was removed meanwhile. */
-    private fun attachCompressed(photoId: String, path: String) {
-        var attached = false
-        _uiState.update { state ->
-            attached = state.photos.any { it.id == photoId }
-            if (!attached) return@update state
-            state.copy(photos = state.photos.map { if (it.id == photoId) it.copy(localPath = path) else it })
-        }
-        if (!attached) photoCompressor.discard(path)
+        val pending = draftPhotos.accept(sources, _uiState.value.photoRoom)
+        if (pending.isNotEmpty()) launchDraftWork { draftPhotos.compress(pending) }
     }
 
     /** Removes a photo from the form; one already on the place is deleted when the edit is saved. */
@@ -298,7 +256,7 @@ class AddPlaceViewModel(
                 }
             )
         }
-        removed.localPath?.let(photoCompressor::discard)
+        draftPhotos.discard(listOf(removed))
     }
 
     fun onPhotoPrivacyToggled(photoId: String) = _uiState.update { state ->
@@ -410,7 +368,7 @@ class AddPlaceViewModel(
     fun clearDraft() {
         draftWork.forEach { it.cancel() }
         draftWork.clear()
-        _uiState.value.photos.forEach { photo -> photo.localPath?.let(photoCompressor::discard) }
+        draftPhotos.discard(_uiState.value.photos)
         _uiState.value = AddPlaceUiState()
     }
 
@@ -419,7 +377,4 @@ class AddPlaceViewModel(
         draftWork.removeAll { it.isCompleted }
         draftWork += viewModelScope.launch(block = block)
     }
-
-    @OptIn(ExperimentalUuidApi::class)
-    private fun newPhotoId(): String = Uuid.random().toHexString()
 }
