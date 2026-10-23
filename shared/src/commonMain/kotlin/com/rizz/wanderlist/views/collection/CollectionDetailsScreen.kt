@@ -54,6 +54,7 @@ import com.rizz.wanderlist.domain.model.PlaceCollection
 import com.rizz.wanderlist.domain.model.PlaceStatus
 import com.rizz.wanderlist.util.formatCoordinates
 import com.rizz.wanderlist.util.formatDate
+import com.rizz.wanderlist.util.pluralize
 import com.rizz.wanderlist.views.place.MarkerBadge
 import com.rizz.wanderlist.views.place.PlaceMarker
 import com.rizz.wanderlist.views.place.collectionBrush
@@ -153,7 +154,7 @@ private fun Header(collection: PlaceCollection, placeCount: Int, photoCount: Int
         Column {
             Text(collection.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(
-                "${plural(placeCount, "place")} · ${plural(photoCount, "photo")}",
+                "${pluralize(placeCount, "place")} · ${pluralize(photoCount, "photo")}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -182,8 +183,8 @@ private fun PlaceCard(place: Place, collection: PlaceCollection) {
         add(if (place.status == PlaceStatus.VISITED) "Visited" else "Want to visit")
         place.visitedOnEpochMillis?.let { add(formatDate(it)) }
         place.rating?.let { add("★ $it") }
-        if (place.photos.isNotEmpty()) add(plural(place.photos.size, "photo"))
-        if (place.members.isNotEmpty()) add(plural(place.members.size, "person").replace("persons", "people"))
+        if (place.photos.isNotEmpty()) add(pluralize(place.photos.size, "photo"))
+        if (place.members.isNotEmpty()) add(pluralize(place.members.size, "person", "people"))
     }.joinToString(" · ")
 
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
@@ -266,6 +267,3 @@ private fun EmptyState(title: String, message: String) {
         )
     }
 }
-
-private fun plural(count: Int, word: String): String =
-    if (count == 1) "1 $word" else "$count ${word}s"

@@ -63,16 +63,15 @@ Kotlin Multiplatform + Compose Multiplatform travel app (Android + iOS from one 
 - Home UI with a **map placeholder**.
 - Add Place screen (location, details, photos UI, marker chooser, collection picker sheet, people, save). The ViewModel enforces: wishlist has no date/rating, private photo can't be a marker, photos/members de-duplicated.
 - Domain model: `Place`, `PlaceStatus`, `PlacePhoto`, `MemberRole`, `PlaceMember`, `MarkerStyle`, `SelectedLocation`.
+- Saving a place + collection page: `NewPlace`, `PlaceRepository`, `SavePlaceUseCase`, `InMemoryPlaceRepository`, `CollectionDetailViewModel`, `CollectionDetailRoute/Screen` (Places tab + All-photos grid), `Route.CollectionDetail`, manual-entry `MapPickerRoute`.
+- Collections → collection page: tapping a `CollectionCard` opens `Route.CollectionDetail`. Place counts are live: `PlaceCollection` has no stored count; counts come from `PlaceRepository.observePlaceCounts()`, joined by `ObserveCollectionSummariesUseCase` into `CollectionSummary` (used by Collections and the Add Place picker). Shared `util/pluralize`.
 
 ### Compiles on both targets, runtime NOT yet confirmed
-- Saving a place + collection page: `NewPlace`, `PlaceRepository`, `SavePlaceUseCase`, `InMemoryPlaceRepository`, `CollectionDetailViewModel`, `CollectionDetailRoute/Screen` (Places tab + All-photos grid), `Route.CollectionDetail`, manual-entry `MapPickerRoute`.
-- Check: save a place → land on the collection page → add a second place from inside it.
+- (nothing)
 
 ### Pending, in order
-1. **Hook Collections up to the collection page.**
-   - Make `CollectionCard` clickable; add `onCollectionClick(id)` to `CollectionsRoute`/`Screen` and the `Route.Collections` entry (`backStack.add(Route.CollectionDetail(id))`).
-   - Fix stale `placeCount`: derive it from `PlaceRepository` instead of the stored field. It is shown in `CollectionsScreen`, `AddPlaceScreen` and `AddPlaceSheet`.
-   - Replace text glyphs (`+`, `←`, `✓`) with icons + `contentDescription`s; replace `Color.White`; make icon and colour pickers accessible. `CollectionCard` is reused as the preview in Create Collection.
+1. **Finish Collections.**
+   - Create Collection: replace text glyphs (`←`, `✓`) with icons + `contentDescription`s; replace `Color.White` (also in `AppNavigation`); make icon and colour pickers accessible (selected state, labels).
    - Add "Shared with me" as a segment on the Collections tab.
 2. **UI-4.** Place detail (photo pager, details, Directions, Edit, Leave place), full-screen photo viewer, Profile (avatar, name, email, sign out), Home map extras (marker bottom sheet, collection filter chips, my-location button, `HomeViewModel`).
 3. **Theme polish.** Typography, Shapes, semantic colours (Visited / Wishlist), status-bar style.

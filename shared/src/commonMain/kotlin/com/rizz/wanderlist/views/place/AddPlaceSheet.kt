@@ -40,9 +40,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.rizz.wanderlist.domain.model.CollectionSummary
 import com.rizz.wanderlist.domain.model.MemberRole
-import com.rizz.wanderlist.domain.model.PlaceCollection
 import com.rizz.wanderlist.util.isValidEmail
+import com.rizz.wanderlist.util.pluralize
 
 internal fun MemberRole.title(): String = when (this) {
     MemberRole.COLLABORATOR -> "Collaborator"
@@ -56,7 +57,7 @@ internal fun MemberRole.description(): String = when (this) {
 
 @Composable
 internal fun CollectionPickerSheet(
-    collections: List<PlaceCollection>,
+    collections: List<CollectionSummary>,
     selectedId: String?,
     onSelect: (String) -> Unit,
     onCreate: () -> Unit,
@@ -77,10 +78,11 @@ internal fun CollectionPickerSheet(
             }
 
             LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
-                items(collections, key = { it.id }) { collection ->
+                items(collections, key = { it.collection.id }) { summary ->
+                    val collection = summary.collection
                     ListItem(
                         headlineContent = { Text(collection.name) },
-                        supportingContent = { Text("${collection.placeCount} places") },
+                        supportingContent = { Text(pluralize(summary.placeCount, "place")) },
                         leadingContent = {
                             MarkerBadge(
                                 emoji = collection.icon,

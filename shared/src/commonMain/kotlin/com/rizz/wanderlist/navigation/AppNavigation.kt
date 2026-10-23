@@ -179,6 +179,7 @@ fun AppNavigation(onSignOut: () -> Unit) {
                 entry<Route.Collections> {
                     CollectionsRoute(
                         onAddClick = { backStack.add(Route.CreateCollection) },
+                        onCollectionClick = { id -> backStack.add(Route.CollectionDetail(id)) },
                         onSignOutClick = {
                             addPlaceViewModel.clearDraft()
                             onSignOut()

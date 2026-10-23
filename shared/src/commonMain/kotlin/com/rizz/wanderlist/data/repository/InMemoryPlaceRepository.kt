@@ -21,6 +21,9 @@ class InMemoryPlaceRepository : PlaceRepository {
                 .sortedByDescending { it.createdAtEpochMillis }
         }
 
+    override fun observePlaceCounts(): Flow<Map<String, Int>> =
+        places.map { all -> all.groupingBy { it.collectionId }.eachCount() }
+
     override suspend fun createPlace(newPlace: NewPlace): Place {
         val now = Clock.System.now().toEpochMilliseconds()
         val place = Place(

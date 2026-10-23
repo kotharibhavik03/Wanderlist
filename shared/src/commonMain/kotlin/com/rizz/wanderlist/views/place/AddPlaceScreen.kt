@@ -74,6 +74,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.rizz.wanderlist.domain.model.CollectionSummary
 import com.rizz.wanderlist.domain.model.MarkerStyle
 import com.rizz.wanderlist.domain.model.MemberRole
 import com.rizz.wanderlist.domain.model.PlaceCollection
@@ -82,6 +83,7 @@ import com.rizz.wanderlist.domain.model.PlaceStatus
 import com.rizz.wanderlist.domain.model.SelectedLocation
 import com.rizz.wanderlist.util.formatCoordinates
 import com.rizz.wanderlist.util.formatDate
+import com.rizz.wanderlist.util.pluralize
 
 class AddPlaceActions(
     val onBack: () -> Unit,
@@ -107,7 +109,7 @@ class AddPlaceActions(
 @Composable
 fun AddPlaceScreen(
     uiState: AddPlaceUiState,
-    collections: List<PlaceCollection>,
+    collections: List<CollectionSummary>,
     actions: AddPlaceActions
 ) {
     var showCollectionSheet by rememberSaveable { mutableStateOf(false) }
@@ -123,7 +125,8 @@ fun AddPlaceScreen(
     }
 
 
-    val selectedCollection = collections.firstOrNull { it.id == uiState.selectedCollectionId }
+    val selectedSummary = collections.firstOrNull { it.collection.id == uiState.selectedCollectionId }
+    val selectedCollection = selectedSummary?.collection
     val markerBrush = collectionBrush(
         colors = selectedCollection?.colors.orEmpty(),
         fallback = MaterialTheme.colorScheme.primary
@@ -161,7 +164,7 @@ fun AddPlaceScreen(
                 onTogglePrivate = actions.onPhotoPrivacyToggled
             )
             MarkerSection(uiState, selectedCollection, markerBrush, actions.onMarkerStyleChange)
-            CollectionSection(selectedCollection, markerBrush) { showCollectionSheet = true }
+            CollectionSection(selectedSummary, markerBrush) { showCollectionSheet = true }
             PeopleSection(
                 members = uiState.members,
                 onAdd = { showAddPerson = true },
@@ -491,10 +494,11 @@ private fun MarkerOption(
 
 @Composable
 private fun CollectionSection(
-    collection: PlaceCollection?,
+    summary: CollectionSummary?,
     brush: Brush,
     onClick: () -> Unit
 ) {
+    val collection = summary?.collection
     Section("Collection") {
         OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -508,9 +512,9 @@ private fun CollectionSection(
                         text = collection?.name ?: "Choose a collection",
                         style = MaterialTheme.typography.titleMedium
                     )
-                    if (collection != null) {
+                    if (summary != null) {
                         Text(
-                            "${collection.placeCount} places",
+                            pluralize(summary.placeCount, "place"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

@@ -4,15 +4,15 @@ import kotlinx.coroutines.launch
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rizz.wanderlist.domain.model.CollectionSummary
 import com.rizz.wanderlist.domain.model.MarkerStyle
 import com.rizz.wanderlist.domain.model.MemberRole
 import com.rizz.wanderlist.domain.model.NewPlace
 import com.rizz.wanderlist.domain.model.NewPlacePhoto
-import com.rizz.wanderlist.domain.model.PlaceCollection
 import com.rizz.wanderlist.domain.model.PlaceMember
 import com.rizz.wanderlist.domain.model.PlaceStatus
 import com.rizz.wanderlist.domain.model.SelectedLocation
-import com.rizz.wanderlist.domain.repository.CollectionRepository
+import com.rizz.wanderlist.domain.usecase.ObserveCollectionSummariesUseCase
 import com.rizz.wanderlist.domain.usecase.SavePlaceUseCase
 import com.rizz.wanderlist.util.isValidEmail
 import kotlinx.coroutines.channels.Channel
@@ -56,7 +56,7 @@ data class AddPlaceUiState(
  * screens, so AppNavigation owns it and clears it when the flow ends.
  */
 class AddPlaceViewModel(
-    collectionRepository: CollectionRepository,
+    observeCollectionSummaries: ObserveCollectionSummariesUseCase,
     private val savePlace: SavePlaceUseCase
 ) : ViewModel() {
 
@@ -66,8 +66,8 @@ class AddPlaceViewModel(
     private val _events = Channel<AddPlaceEvent>(Channel.BUFFERED)
     val events: Flow<AddPlaceEvent> = _events.receiveAsFlow()
 
-    val collections: StateFlow<List<PlaceCollection>> =
-        collectionRepository.observeCollections()
+    val collections: StateFlow<List<CollectionSummary>> =
+        observeCollectionSummaries()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun onSearchQueryChange(query: String) = _uiState.update { it.copy(searchQuery = query) }

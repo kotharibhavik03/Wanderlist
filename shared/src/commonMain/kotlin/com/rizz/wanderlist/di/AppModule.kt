@@ -7,6 +7,7 @@ import com.rizz.wanderlist.domain.repository.AuthRepository
 import com.rizz.wanderlist.domain.repository.CollectionRepository
 import com.rizz.wanderlist.domain.repository.PlaceRepository
 import com.rizz.wanderlist.domain.usecase.CreateCollectionUseCase
+import com.rizz.wanderlist.domain.usecase.ObserveCollectionSummariesUseCase
 import com.rizz.wanderlist.domain.usecase.SavePlaceUseCase
 import com.rizz.wanderlist.views.auth.AuthViewModel
 import com.rizz.wanderlist.views.auth.SignInViewModel
@@ -20,6 +21,7 @@ import org.koin.dsl.module
 val appModule = module {
     single<CollectionRepository> { InMemoryCollectionRepository() }
     factory { CreateCollectionUseCase(get()) }
+    factory { ObserveCollectionSummariesUseCase(get(), get()) }
     viewModel { CollectionsViewModel(get()) }
     viewModel { CreateCollectionViewModel(get()) }
 

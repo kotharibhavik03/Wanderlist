@@ -77,12 +77,13 @@ fun CreateCollectionScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             CollectionCard(
-                PlaceCollection(
+                collection = PlaceCollection(
                     id = "preview",
                     name = uiState.name.ifBlank { "Collection name" },
                     icon = uiState.icon,
                     colors = uiState.colors
-                )
+                ),
+                placeCount = 0
             )
 
             OutlinedTextField(

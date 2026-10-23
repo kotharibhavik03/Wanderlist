@@ -11,5 +11,8 @@ interface PlaceRepository {
      */
     fun observePlaces(collectionId: String): Flow<List<Place>>
 
+    /** How many places each collection holds, keyed by collection id. Missing key means none. */
+    fun observePlaceCounts(): Flow<Map<String, Int>>
+
     suspend fun createPlace(newPlace: NewPlace): Place
 }
