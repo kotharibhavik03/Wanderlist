@@ -19,6 +19,12 @@ interface PlaceRepository {
      */
     fun observePlace(placeId: String): Flow<Place?>
 
+    /**
+     * Every place the signed-in user can see, own or shared with them, newest first.
+     * This is what the map shows. Same photo visibility as [observePlaces].
+     */
+    fun observeVisiblePlaces(): Flow<List<Place>>
+
     /** How many places each collection holds, keyed by collection id. Missing key means none. */
     fun observePlaceCounts(): Flow<Map<String, Int>>
 

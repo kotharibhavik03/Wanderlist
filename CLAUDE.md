@@ -56,6 +56,7 @@ Kotlin Multiplatform + Compose Multiplatform travel app (Android + iOS from one 
 - Edit place + Leave place. Edit (owner, collaborator) reuses the Add Place form via `Route.EditPlace(placeId)`; `AddPlaceUiState.mode: DraftMode` (New / Loading / Editing(access) / Unavailable); `startEditing(placeId)` is idempotent so returning from the map picker keeps changes. Collaborators don't see Collection or People; edit mode hides Photos. Leave (collaborator, visited-with) on Place detail with a confirm dialog removes the member and their photos. Domain: `PlaceDetails` (editable fields; `NewPlace` = details + photos), shared `validatePlaceDetails`, `UpdatePlaceUseCase`, `PlaceRepository.updatePlace/leavePlace` enforce the access rules. `util/resultOf` = runCatching that rethrows `CancellationException`.
 - Delete (owner only). Place detail shows "Delete place" for the owner and "Leave place" for members (shared `RemoveAction` dialog; event `PlaceDetailEvent.PlaceRemoved`). Collection page has a ⋮ menu with "Delete collection"; `DeleteCollectionUseCase` deletes the owner's places in it first (`PlaceRepository.deletePlacesInCollection`), then the collection (`CollectionRepository.deleteCollection`). Confirmation names the place count. Moving a place between collections is done via Edit (owner).
 - Profile tab (`views/profile`: `ProfileRoute/Screen`, `ProfileViewModel` from `AuthRepository.currentUser`): initials avatar (Google photo comes with Coil in the Photos step), name, email, "Signed in with Google", Sign out (via `AppNavigation`'s `onSignOut`, which clears the draft). Sign out removed from the Collections top bar, now titled "Collections".
+- Home tab (`HomeViewModel`, `HomeRoute/HomeScreen`): real place count (follows filters); multi-select filter chips (All · each collection with count · Shared with me when any); search over name, map name, address and collection name, results open Place detail; map area is still a placeholder describing what it will show. Data from new `PlaceRepository.observeVisiblePlaces()` (own + shared, the map's future data source). Removed the duplicate filter buttons and unused `HomeRoute` parameters; search is an `OutlinedTextField` with a clear button.
 
 ## Status
 
@@ -76,14 +77,11 @@ Kotlin Multiplatform + Compose Multiplatform travel app (Android + iOS from one 
 - (nothing)
 
 ### Pending, in order
-1. **UI-4**, remaining steps in order:
-   - Home map extras (marker bottom sheet, collection filter chips, my-location button, `HomeViewModel`).
-   - Full-screen photo viewer moves to the Photos step (nothing to view until the picker works).
-2. **Theme polish.** Typography, Shapes, semantic colours (Visited / Wishlist), status-bar style.
-3. **Functional phase** (only after the UI is done):
+1. **Theme polish.** Typography, Shapes, semantic colours (Visited / Wishlist), status-bar style.
+2. **Functional phase** (only after the UI is done):
    - Firestore: **verify the GitLive `firebase-firestore` version matches KMPAuth's GitLive 3.0.0-alpha01**; link FirebaseFirestore via SPM on iOS; security rules; `FirestoreCollectionRepository` and `FirestorePlaceRepository`. Denormalise member-ids / member-emails arrays on the place for rules and queries, and the owner's name/email so "Shared with me" can show who shared it. **Scope per user** (fixes the account-switch leak): add `ownerId` to `PlaceCollection`; collections query only the signed-in user's; `observePlaces(collectionId)` and place counts return only places the user owns; rules: a collection is readable only by its owner, a place by its owner or an email in `memberEmails`. Deleting a place or a collection must also delete its photos from Storage; delete a collection's places and the collection in one batch.
-   - Google Maps: expect/actual wrapper (Maps Compose on Android, native SDK on iOS), custom markers, real Map Picker with pin-drop and free geocoders. API key stays out of Git.
-   - Photos: picker (expect/actual), compression, Coil 3, Firebase Storage behind `PhotoStorage`. Replace local-uri photo ids with real ids and map `MarkerStyle.Photo` on upload. Add/remove your own photos on an existing place (edit mode currently hides Photos), and make the edit-mode marker chooser list the place's existing shared photos. When the owner removes a member, remove that member's photos too (needs member email → user id).
+   - Google Maps: expect/actual wrapper (Maps Compose on Android, native SDK on iOS), custom markers, real Map Picker with pin-drop and free geocoders. API key stays out of Git. Home's map replaces `MapPlaceholder` and shows `HomeUiState.places` (already filtered by the chips); add a my-location button. **Marker tap opens a Google Maps-style bottom sheet** (draggable: peek, then expand) for that place showing all its shared photos, location/address, rating, status, visit date, notes and the rest of its info, with Directions and a way into Place detail.
+   - Photos: picker (expect/actual), compression, Coil 3, Firebase Storage behind `PhotoStorage`. Replace local-uri photo ids with real ids and map `MarkerStyle.Photo` on upload. Photo pager on Place detail and a full-screen photo viewer. Add/remove your own photos on an existing place (edit mode currently hides Photos), and make the edit-mode marker chooser list the place's existing shared photos. When the owner removes a member, remove that member's photos too (needs member email → user id).
    - Collaboration: `users` collection with email lookup, invites for unregistered emails resolved on first sign-in, leave-place, visibility rules.
    - Show the Google profile photo (Coil) instead of initials, change profile photo, then CI, README and polish. (Directions already done via https links.)
 
@@ -92,7 +90,6 @@ Kotlin Multiplatform + Compose Multiplatform travel app (Android + iOS from one 
 - Photo picker is a stub (`onAddPhotos` does nothing), so photo tiles and All-photos are empty.
 - All data is in-memory and lost on restart. In-memory stores survive sign-out and collections have no owner, so after switching accounts the new user sees the previous user's collections (and, through the collection page, its places). Accepted until Firestore; see the Firestore item.
 - Add Place doesn't check whether an invited email is the user's own.
-- `HomeRoute`: hardcoded "0 Places", two actions both wired to `onFilterClick`, unused `onCollectionsClick` / `onProfileClick` / `innerPadding`.
 - `views/mapPicker/MapPickerRoute.kt` declares package `views.place` (folder/package mismatch).
 - File name typo: `SelectedLocaiton.kt`.
 - Template leftovers to delete: `Greeting.kt`, `GreetingUtil.kt`, `Platform*.kt`, and the sample tests in `commonTest`, `iosTest`, `androidHostTest`.

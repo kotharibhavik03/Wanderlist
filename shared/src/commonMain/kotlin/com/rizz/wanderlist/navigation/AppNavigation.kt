@@ -159,20 +159,8 @@ fun AppNavigation(onSignOut: () -> Unit) {
             entryProvider = entryProvider {
                 entry<Route.Home> {
                     HomeRoute(
-                        onCollectionsClick = {
-                            if (backStack.lastOrNull() !is Route.Collections) {
-                                backStack.add(Route.Collections)
-                            }
-                        },
-                        onProfileClick = {
-                            if (backStack.lastOrNull() !is Route.Profile) {
-                                backStack.add(Route.Profile)
-                            }
-                        },
                         onAddClick = { backStack.add(Route.AddPlace) },
-                        onFilterClick = {
-                            // Collection filtering will be implemented next.
-                        }
+                        onPlaceClick = { id -> backStack.add(Route.PlaceDetail(id)) }
                     )
                 }
 

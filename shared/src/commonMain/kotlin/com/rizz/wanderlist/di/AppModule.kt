@@ -16,6 +16,7 @@ import com.rizz.wanderlist.views.auth.SignInViewModel
 import com.rizz.wanderlist.views.collection.CollectionDetailViewModel
 import com.rizz.wanderlist.views.collection.CollectionsViewModel
 import com.rizz.wanderlist.views.collection.CreateCollectionViewModel
+import com.rizz.wanderlist.views.home.HomeViewModel
 import com.rizz.wanderlist.views.place.AddPlaceViewModel
 import com.rizz.wanderlist.views.place.PlaceDetailViewModel
 import com.rizz.wanderlist.views.profile.ProfileViewModel
@@ -33,6 +34,7 @@ val appModule = module {
     single<AuthRepository> { KmpAuthRepository() }
     viewModel { AuthViewModel(get()) }
     viewModel { ProfileViewModel(get()) }
+    viewModel { HomeViewModel(get(), get(), get()) }
     viewModel { SignInViewModel() }
 
     viewModel { AddPlaceViewModel(get(), get(), get(), get(), get()) }

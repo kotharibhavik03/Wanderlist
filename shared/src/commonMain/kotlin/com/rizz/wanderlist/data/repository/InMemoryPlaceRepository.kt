@@ -41,6 +41,14 @@ class InMemoryPlaceRepository(private val authRepository: AuthRepository) : Plac
                 ?.visibleTo(user)
         }
 
+    override fun observeVisiblePlaces(): Flow<List<Place>> =
+        combine(places, authRepository.currentUser) { all, user ->
+            if (user == null) return@combine emptyList()
+            all.filter { it.accessFor(user) != null }
+                .sortedByDescending { it.createdAtEpochMillis }
+                .map { it.visibleTo(user) }
+        }
+
     override fun observePlaceCounts(): Flow<Map<String, Int>> =
         places.map { all -> all.groupingBy { it.collectionId }.eachCount() }
 
