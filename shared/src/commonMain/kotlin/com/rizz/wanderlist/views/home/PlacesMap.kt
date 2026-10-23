@@ -2,16 +2,12 @@ package com.rizz.wanderlist.views.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
+import com.rizz.wanderlist.domain.model.GeoPoint
 import com.rizz.wanderlist.domain.model.SelectedLocation
 import com.rizz.wanderlist.views.map.AppMapUiSettings
 import com.rizz.wanderlist.views.map.WorldView
@@ -45,6 +42,9 @@ private const val SinglePlaceZoom = 12f
 /** Selecting a place zooms in to at least this level, so its surroundings are recognisable. */
 private const val SelectedPlaceMinZoom = 12f
 
+/** "My location" on Home shows the neighbourhood around you. */
+private const val MyLocationMinZoom = 14f
+
 /**
  * The places the filter chips select, as markers. Tapping a marker reports that place's id;
  * the selected place's marker is drawn larger and the camera moves to it.
@@ -55,6 +55,11 @@ internal fun PlacesMap(
     selectedPlaceId: String?,
     /** A searched location to show with a temporary pin, or null. */
     pin: SelectedLocation?,
+    /** Fly here once ("my location"), then report it with [onMyLocationShown]. */
+    myLocation: GeoPoint?,
+    onMyLocationShown: () -> Unit,
+    /** Draw the blue "you are here" dot (only once location access is granted). */
+    showMyLocation: Boolean,
     onMarkerClick: (placeId: String) -> Unit,
     /** A tap on the map itself, not on a marker. */
     onMapClick: () -> Unit,
@@ -64,7 +69,7 @@ internal fun PlacesMap(
 ) {
     val cameraState = rememberCameraPositionState { position = WorldView }
     var mapLoaded by remember { mutableStateOf(false) }
-    val properties = rememberMapProperties()
+    val properties = rememberMapProperties(showMyLocation)
 
     // Frame the visible places whenever the set changes (first load, a filter chip, a new place).
     // Only after the map has loaded: framing bounds on a map with no size crashes on Android.
@@ -81,6 +86,14 @@ internal fun PlacesMap(
         cameraState.animateOrJump(
             CameraUpdateFactory.newLatLngZoom(LatLng(selected.place.latitude, selected.place.longitude), zoom)
         )
+    }
+
+    // Fly to the device's position after "my location".
+    LaunchedEffect(mapLoaded, myLocation) {
+        if (!mapLoaded || myLocation == null) return@LaunchedEffect
+        val zoom = maxOf(cameraState.position.zoom, MyLocationMinZoom)
+        cameraState.animateOrJump(CameraUpdateFactory.newLatLngZoom(LatLng(myLocation.latitude, myLocation.longitude), zoom))
+        onMyLocationShown()
     }
 
     // Fly to a searched location.
@@ -136,14 +149,6 @@ internal fun PlacesMap(
             }
         }
 
-        if (places.isEmpty() && pin == null) {
-            EmptyMapHint(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(contentPadding)
-                    .padding(16.dp)
-            )
-        }
     }
 }
 
@@ -163,26 +168,6 @@ private fun MapBadge(item: HomePlace, isSelected: Boolean) {
         contentAlignment = Alignment.Center
     ) {
         PlaceMarker(item.place.markerStyle, item.collection, size = badgeSize)
-    }
-}
-
-@Composable
-private fun EmptyMapHint(modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
-        shadowElevation = 2.dp
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Your map starts here", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Add places to see your memories on the map.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }
 

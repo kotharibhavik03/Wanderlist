@@ -43,8 +43,8 @@ val appModule = module {
     viewModel { AuthViewModel(get(), get()) }
     viewModel { ProfileViewModel(get()) }
     factory { SearchLocationsUseCase(get()) }
-    viewModel { HomeViewModel(get(), get(), get(), get()) }
-    viewModel { MapPickerViewModel(get(), get()) }
+    viewModel { HomeViewModel(get(), get(), get(), get(), get()) }
+    viewModel { MapPickerViewModel(get(), get(), get()) }
     viewModel { SignInViewModel() }
 
     viewModel { AddPlaceViewModel(get(), get(), get(), get(), get()) }

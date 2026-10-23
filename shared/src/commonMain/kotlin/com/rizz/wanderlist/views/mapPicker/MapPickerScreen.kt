@@ -36,6 +36,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -60,6 +62,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rizz.wanderlist.domain.model.SelectedLocation
 import com.rizz.wanderlist.domain.usecase.SearchLocationsUseCase
 import com.rizz.wanderlist.util.formatCoordinates
+import com.rizz.wanderlist.views.location.MyLocationButton
+import com.rizz.wanderlist.views.location.rememberMyLocationClick
 import com.rizz.wanderlist.views.map.AppMapUiSettings
 import com.rizz.wanderlist.views.map.WorldView
 import com.rizz.wanderlist.views.map.animateOrJump
@@ -93,7 +97,12 @@ fun MapPickerRoute(
         onQueryChange = viewModel::onQueryChange,
         onResultPicked = viewModel::onResultPicked,
         onCameraIdle = viewModel::onCameraIdle,
-        onFlyToHandled = viewModel::onFlyToHandled
+        onFlyToHandled = viewModel::onFlyToHandled,
+        hasLocationPermission = viewModel::hasLocationPermission,
+        onPermissionAnswered = viewModel::onPermissionAnswered,
+        onPermissionRefused = viewModel::onPermissionRefused,
+        onMyLocation = viewModel::goToMyLocation,
+        onMessageShown = viewModel::onMessageShown
     )
 }
 
@@ -111,9 +120,27 @@ fun MapPickerScreen(
     onQueryChange: (String) -> Unit,
     onResultPicked: (SelectedLocation) -> Unit,
     onCameraIdle: (latitude: Double, longitude: Double) -> Unit,
-    onFlyToHandled: () -> Unit
+    onFlyToHandled: () -> Unit,
+    hasLocationPermission: () -> Boolean,
+    onPermissionAnswered: (granted: Boolean) -> Unit,
+    onPermissionRefused: () -> Unit,
+    onMyLocation: () -> Unit,
+    onMessageShown: () -> Unit
 ) {
     val density = LocalDensity.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(uiState.message) {
+        uiState.message?.let {
+            snackbarHostState.showSnackbar(it)
+            onMessageShown()
+        }
+    }
+    val onMyLocationClick = rememberMyLocationClick(
+        hasPermission = hasLocationPermission,
+        onPermissionAnswered = onPermissionAnswered,
+        onAllowed = onMyLocation,
+        onRefused = onPermissionRefused
+    )
     val focusManager = LocalFocusManager.current
     val cameraState = rememberCameraPositionState {
         position = initial?.let { CameraPosition(LatLng(it.latitude, it.longitude), PinZoom, 0f, 0f) } ?: WorldView
@@ -122,25 +149,34 @@ fun MapPickerScreen(
     var topHeight by remember { mutableStateOf(0.dp) }
     var bottomHeight by remember { mutableStateOf(0.dp) }
 
-    // Each time the map comes to rest, report the point under the pin. Not before the first
-    // movement: the starting location already has its name.
+    // Set while one of our own fly-to animations (search result, my location) is running.
+    val flying = remember { FlyingFlag() }
+
+    // Each time the map comes to rest after the user moved it, or after we flew it somewhere,
+    // report the point under the pin. Other camera "moves" are ignored: the map also reports
+    // them when its padding is applied (on opening the picker, too), and treating those as a
+    // choice would pin whatever was under the pin, even the middle of the world view.
     LaunchedEffect(cameraState) {
         snapshotFlow { cameraState.isMoving }.collect { moving ->
-            if (!moving && cameraState.cameraMoveStartedReason != CameraMoveStartedReason.NO_MOVEMENT_YET) {
+            if (moving) return@collect
+            val chosen = cameraState.cameraMoveStartedReason == CameraMoveStartedReason.GESTURE || flying.value
+            flying.value = false
+            if (chosen) {
                 val target = cameraState.position.target
                 onCameraIdle(target.latitude, target.longitude)
             }
         }
     }
 
-    // Fly to a picked search result; landing there reports it as the pinned point.
+    // Fly to a picked search result or the device's position; landing there reports the point.
     LaunchedEffect(uiState.flyTo, mapLoaded) {
         val target = uiState.flyTo ?: return@LaunchedEffect
         if (!mapLoaded) return@LaunchedEffect
+        flying.value = true
         cameraState.animateOrJump(
             CameraUpdateFactory.newLatLngZoom(
                 LatLng(target.latitude, target.longitude),
-                maxOf(cameraState.position.zoom, SearchResultZoom)
+                maxOf(cameraState.position.zoom, target.zoom)
             )
         )
         onFlyToHandled()
@@ -150,7 +186,7 @@ fun MapPickerScreen(
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraState,
-            properties = rememberMapProperties(),
+            properties = rememberMapProperties(showMyLocation = uiState.hasLocationPermission),
             uiSettings = AppMapUiSettings,
             contentPadding = PaddingValues(top = topHeight, bottom = bottomHeight),
             onMapClick = { focusManager.clearFocus() },
@@ -205,6 +241,21 @@ fun MapPickerScreen(
             )
         }
 
+        MyLocationButton(
+            isLocating = uiState.isLocating,
+            onClick = onMyLocationClick,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = bottomHeight + 12.dp)
+        )
+
+        SnackbarHost(
+            snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = bottomHeight)
+        )
+
         BottomPanel(
             pinned = uiState.pinned,
             isResolving = uiState.isResolving,
@@ -218,8 +269,10 @@ fun MapPickerScreen(
 
 private val PinSize = 48.dp
 
-/** A search result is a town or landmark: show its surroundings, then the user zooms in to the spot. */
-private const val SearchResultZoom = 15f
+/** A plain holder (not Compose state): read and written only inside the camera effects. */
+private class FlyingFlag {
+    var value = false
+}
 
 @Composable
 private fun TopPanel(

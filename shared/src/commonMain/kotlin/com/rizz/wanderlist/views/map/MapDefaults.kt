@@ -22,12 +22,19 @@ import kotlinx.coroutines.ensureActive
 /** Zoomed out far enough to show most of the world when there's nothing to frame yet. */
 internal val WorldView = CameraPosition(LatLng(20.0, 0.0), 1.5f, 0f, 0f)
 
-/** The map's look: Google's default in light mode, the Night style in dark mode (follows the app theme). */
+/**
+ * The map's look: Google's default in light mode, the Night style in dark mode (follows the app
+ * theme). [showMyLocation] draws the blue "you are here" dot; only pass true once location access
+ * is granted (Android refuses to enable it otherwise).
+ */
 @Composable
-internal fun rememberMapProperties(): MapProperties {
+internal fun rememberMapProperties(showMyLocation: Boolean = false): MapProperties {
     val isDark = MaterialTheme.isDark
-    return remember(isDark) {
-        MapProperties(mapStyleOptions = if (isDark) MapStyleOptions.fromJson(DarkMapStyleJson) else null)
+    return remember(isDark, showMyLocation) {
+        MapProperties(
+            isMyLocationEnabled = showMyLocation,
+            mapStyleOptions = if (isDark) MapStyleOptions.fromJson(DarkMapStyleJson) else null
+        )
     }
 }
 

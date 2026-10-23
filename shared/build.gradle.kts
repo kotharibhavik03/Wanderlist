@@ -45,6 +45,9 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.compose.uiTooling)
+            // Location permission prompt (Activity result API) and the device's position.
+            implementation(libs.androidx.activity.compose)
+            implementation(libs.play.services.location)
         }
         commonMain.dependencies {
 

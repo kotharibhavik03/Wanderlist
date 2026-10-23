@@ -29,6 +29,8 @@ gitliveFirebase = "3.0.0-alpha01"
 # Google Maps for Android (maps-compose) and iOS (Google Maps SDK) behind one Compose API.
 # 0.7.0 is built with Kotlin 2.4.20 / Compose 1.12.1 and expects Google Maps iOS SDK 10.15.0.
 kmpMapsCompose = "0.7.0"
+# Android's Fused Location provider, for "use my current location".
+playServicesLocation = "21.4.0"
 googleServices = "4.5.0"
 
 [libraries]
@@ -67,6 +69,7 @@ kmpauth-firebase = { module = "io.github.mirzemehdi:kmpauth-firebase", version.r
 kmpauth-uihelper = { module = "io.github.mirzemehdi:kmpauth-uihelper", version.ref = "kmpauth" }
 gitlive-firebase-firestore = { module = "dev.gitlive:firebase-firestore", version.ref = "gitliveFirebase" }
 kmp-maps-compose = { module = "eu.buney.maps:kmp-maps-compose", version.ref = "kmpMapsCompose" }
+play-services-location = { module = "com.google.android.gms:play-services-location", version.ref = "playServicesLocation" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

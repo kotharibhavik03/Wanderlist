@@ -81,6 +81,8 @@ import androidx.navigationevent.compose.rememberNavigationEventState
 import com.rizz.wanderlist.domain.model.SelectedLocation
 import com.rizz.wanderlist.util.formatCoordinates
 import com.rizz.wanderlist.util.pluralize
+import com.rizz.wanderlist.views.location.MyLocationButton
+import com.rizz.wanderlist.views.location.rememberMyLocationClick
 import com.rizz.wanderlist.views.place.PlaceMarker
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
@@ -89,6 +91,9 @@ import org.koin.compose.viewmodel.koinViewModel
 
 /** Space at the bottom of the map kept clear for the add button, so framing doesn't hide markers under it. */
 private val AddButtonClearance = 88.dp
+
+/** Puts the my-location button just above the + button (16dp margin + 56dp button + 12dp gap). */
+private val MyLocationAboveAddButton = 84.dp
 
 /** Height of Material's default sheet drag handle: a 4dp bar with 22dp above and below. */
 private val SheetDragHandleHeight = 48.dp
@@ -115,7 +120,13 @@ fun HomeRoute(
         onCollectionToggled = viewModel::onCollectionToggled,
         onSharedToggled = viewModel::onSharedToggled,
         onLocationPicked = viewModel::onLocationPicked,
-        onPickedLocationCleared = viewModel::onPickedLocationCleared
+        onPickedLocationCleared = viewModel::onPickedLocationCleared,
+        hasLocationPermission = viewModel::hasLocationPermission,
+        onPermissionAnswered = viewModel::onPermissionAnswered,
+        onPermissionRefused = viewModel::onPermissionRefused,
+        onMyLocation = viewModel::goToMyLocation,
+        onMyLocationShown = viewModel::onMyLocationShown,
+        onMessageShown = viewModel::onMessageShown
     )
 }
 
@@ -152,12 +163,30 @@ fun HomeScreen(
     onCollectionToggled: (String) -> Unit,
     onSharedToggled: () -> Unit,
     onLocationPicked: (SelectedLocation) -> Unit,
-    onPickedLocationCleared: () -> Unit
+    onPickedLocationCleared: () -> Unit,
+    hasLocationPermission: () -> Boolean,
+    onPermissionAnswered: (granted: Boolean) -> Unit,
+    onPermissionRefused: () -> Unit,
+    onMyLocation: () -> Unit,
+    onMyLocationShown: () -> Unit,
+    onMessageShown: () -> Unit
 ) {
     val density = LocalDensity.current
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(uiState.message) {
+        uiState.message?.let {
+            snackbarHostState.showSnackbar(it)
+            onMessageShown()
+        }
+    }
+    val onMyLocationClick = rememberMyLocationClick(
+        hasPermission = hasLocationPermission,
+        onPermissionAnswered = onPermissionAnswered,
+        onAllowed = onMyLocation,
+        onRefused = onPermissionRefused
+    )
 
     // Height of the floating controls, measured from the top of the screen. The map keeps its
     // framing and Google's logo clear of them, and search results open just below them.
@@ -282,6 +311,9 @@ fun HomeScreen(
                 places = uiState.places,
                 selectedPlaceId = selectedPlaceId,
                 pin = picked,
+                myLocation = uiState.myLocation,
+                onMyLocationShown = onMyLocationShown,
+                showMyLocation = uiState.hasLocationPermission,
                 onMarkerClick = ::selectPlace,
                 onMapClick = {
                     focusManager.clearFocus()
@@ -329,6 +361,14 @@ fun HomeScreen(
 
             // The sheet takes the bottom of the screen while something is selected.
             if (subject == null) {
+                MyLocationButton(
+                    isLocating = uiState.isLocating,
+                    onClick = onMyLocationClick,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(bottom = bottomBarPadding)
+                        .padding(end = 20.dp, bottom = MyLocationAboveAddButton)
+                )
                 FloatingActionButton(
                     onClick = onAddClick,
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -435,7 +475,7 @@ private fun PlaceCountPill(placeCount: Int, isFiltered: Boolean) {
     }
 }
 
-/** All · each collection · Shared with me. Several can be on; none means All. */
+/** All · each collection · Shared with me. Several can be on; none means All. Hidden with nothing to filter. */
 @Composable
 private fun FilterChips(
     uiState: HomeUiState,
@@ -443,6 +483,9 @@ private fun FilterChips(
     onCollectionToggled: (String) -> Unit,
     onSharedToggled: () -> Unit
 ) {
+    // Nothing to filter by yet: no row at all, rather than a lone "All" chip.
+    if (uiState.collections.isEmpty() && uiState.sharedCount == 0) return
+
     // Solid and slightly raised, so chips stay readable over any part of the map.
     val chipColors = FilterChipDefaults.filterChipColors(containerColor = MaterialTheme.colorScheme.surface)
     val chipElevation = FilterChipDefaults.filterChipElevation(elevation = 2.dp)

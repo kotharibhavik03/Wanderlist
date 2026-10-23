@@ -16,6 +16,7 @@ A travel journal for Android and iOS, built from one Kotlin Multiplatform codeba
 | Google Maps on Home with collection-styled markers, filtered by collection | Done |
 | Marker bottom sheet; search anywhere (free phone search) and save what you find | Done |
 | Location picker: search, then move the map under a centre pin; address looked up for the exact spot | Done |
+| Use my current location (picker and map), with the blue "you are here" dot | Done |
 | Photos per place, with private photos visible only to their uploader | Planned |
 | Share a place by email as Collaborator or "Visited with"; "Shared with me"; leave a place | Done |
 | Directions via Google Maps / Apple Maps | Done |

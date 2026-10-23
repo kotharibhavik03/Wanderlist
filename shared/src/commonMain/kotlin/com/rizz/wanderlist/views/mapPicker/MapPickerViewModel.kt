@@ -3,6 +3,7 @@ package com.rizz.wanderlist.views.mapPicker
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rizz.wanderlist.domain.model.SelectedLocation
+import com.rizz.wanderlist.domain.repository.LocationService
 import com.rizz.wanderlist.domain.repository.PlaceSearch
 import com.rizz.wanderlist.domain.usecase.LocationSearchState
 import com.rizz.wanderlist.domain.usecase.SearchLocationsUseCase
@@ -17,6 +18,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+
+/** A camera move the screen should make, at least to [zoom]. */
+data class FlyTo(val latitude: Double, val longitude: Double, val zoom: Float)
 
 data class MapPickerUiState(
     val query: String = "",
@@ -26,7 +31,13 @@ data class MapPickerUiState(
     /** Looking up the address under the pin. */
     val isResolving: Boolean = false,
     /** Ask the map to fly here; cleared once the screen has done it. */
-    val flyTo: SelectedLocation? = null
+    val flyTo: FlyTo? = null,
+    /** Shows the blue "you are here" dot once location access is allowed. */
+    val hasLocationPermission: Boolean = false,
+    /** Finding the device's position after "my location" was tapped. */
+    val isLocating: Boolean = false,
+    /** A one-off message for the user (e.g. location is off); cleared once shown. */
+    val message: String? = null
 )
 
 /**
@@ -35,13 +46,17 @@ data class MapPickerUiState(
  */
 class MapPickerViewModel(
     private val placeSearch: PlaceSearch,
+    private val locationService: LocationService,
     searchLocations: SearchLocationsUseCase
 ) : ViewModel() {
 
     private data class PinState(
         val pinned: SelectedLocation? = null,
         val isResolving: Boolean = false,
-        val flyTo: SelectedLocation? = null
+        val flyTo: FlyTo? = null,
+        val hasLocationPermission: Boolean = false,
+        val isLocating: Boolean = false,
+        val message: String? = null
     )
 
     private val query = MutableStateFlow("")
@@ -59,7 +74,16 @@ class MapPickerViewModel(
         searchLocations(query),
         pin
     ) { q, search, p ->
-        MapPickerUiState(query = q, search = search, pinned = p.pinned, isResolving = p.isResolving, flyTo = p.flyTo)
+        MapPickerUiState(
+            query = q,
+            search = search,
+            pinned = p.pinned,
+            isResolving = p.isResolving,
+            flyTo = p.flyTo,
+            hasLocationPermission = p.hasLocationPermission,
+            isLocating = p.isLocating,
+            message = p.message
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MapPickerUiState())
 
     /** Starts from the place's current location, if it has one. Safe to call again. */
@@ -67,7 +91,7 @@ class MapPickerViewModel(
         if (started) return
         started = true
         anchor = initial
-        pin.value = PinState(pinned = initial)
+        pin.value = PinState(pinned = initial, hasLocationPermission = locationService.hasPermission())
     }
 
     fun onQueryChange(value: String) {
@@ -79,10 +103,45 @@ class MapPickerViewModel(
         query.value = ""
         anchor = location
         resolveJob?.cancel()
-        pin.value = PinState(pinned = location, flyTo = location)
+        pin.update {
+            it.copy(
+                pinned = location,
+                isResolving = false,
+                flyTo = FlyTo(location.latitude, location.longitude, SEARCH_RESULT_ZOOM)
+            )
+        }
     }
 
     fun onFlyToHandled() = pin.update { it.copy(flyTo = null) }
+
+    fun hasLocationPermission(): Boolean = locationService.hasPermission()
+
+    /** The permission dialog was answered: show or hide the "you are here" dot. */
+    fun onPermissionAnswered(granted: Boolean) = pin.update { it.copy(hasLocationPermission = granted) }
+
+    fun onPermissionRefused() = pin.update {
+        it.copy(message = "Location access is off. Allow it in Settings to use your current location.")
+    }
+
+    /** Fly to where the device is; landing there names the spot like any other map stop. */
+    fun goToMyLocation() {
+        if (pin.value.isLocating) return
+        pin.update { it.copy(isLocating = true, hasLocationPermission = true) }
+        viewModelScope.launch {
+            val here = withTimeoutOrNull(LOCATE_TIMEOUT_MS) {
+                resultOf { locationService.currentLocation() }.getOrNull()
+            }
+            pin.update {
+                if (here == null) {
+                    it.copy(isLocating = false, message = "Couldn't find your location. Check that location is turned on.")
+                } else {
+                    it.copy(isLocating = false, flyTo = FlyTo(here.latitude, here.longitude, MY_LOCATION_ZOOM))
+                }
+            }
+        }
+    }
+
+    fun onMessageShown() = pin.update { it.copy(message = null) }
 
     /**
      * The map stopped with the pin at this point. Near the picked result the result is kept;
@@ -125,5 +184,11 @@ class MapPickerViewModel(
         const val SAME_POINT_METERS = 1.0
         const val RESOLVE_DELAY_MS = 300L
         const val UNNAMED = "Pinned location"
+        /** A search result is a town or landmark: show its surroundings. */
+        const val SEARCH_RESULT_ZOOM = 15f
+        /** The device's position: close enough to pick out the building. */
+        const val MY_LOCATION_ZOOM = 17f
+        /** A fix normally takes a few seconds; give up rather than spin forever. */
+        const val LOCATE_TIMEOUT_MS = 15_000L
     }
 }
