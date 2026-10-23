@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Star
@@ -86,6 +85,8 @@ import com.rizz.wanderlist.domain.usecase.memberEmailProblem
 import com.rizz.wanderlist.util.formatCoordinates
 import com.rizz.wanderlist.util.formatDate
 import com.rizz.wanderlist.util.pluralize
+import com.rizz.wanderlist.views.photo.DraftPhoto
+import com.rizz.wanderlist.views.photo.DraftPhotoThumbnail
 
 class AddPlaceActions(
     val onBack: () -> Unit,
@@ -170,16 +171,14 @@ fun AddPlaceScreen(
             ) {
                 LocationSection(uiState.selectedLocation, actions.onOpenMapPicker)
                 DetailsSection(uiState, actions, onPickDate = { showDatePicker = true })
-                // Adding photos to an existing place comes in a later step.
-                if (uiState.mode == DraftMode.New) {
-                    PhotosSection(
-                        photos = uiState.photos,
-                        canAdd = uiState.photoRoom > 0 && !uiState.isSaving,
-                        onAdd = actions.onAddPhotos,
-                        onRemove = actions.onPhotoRemoved,
-                        onTogglePrivate = actions.onPhotoPrivacyToggled
-                    )
-                }
+                PhotosSection(
+                    photos = uiState.photos,
+                    isEditing = uiState.isEditing,
+                    canAdd = uiState.photoRoom > 0 && !uiState.isSaving,
+                    onAdd = actions.onAddPhotos,
+                    onRemove = actions.onPhotoRemoved,
+                    onTogglePrivate = actions.onPhotoPrivacyToggled
+                )
                 MarkerSection(uiState, selectedCollection, markerBrush, actions.onMarkerStyleChange)
                 if (uiState.canManageCollectionAndPeople) {
                     CollectionSection(selectedSummary, markerBrush) { showCollectionSheet = true }
@@ -353,6 +352,7 @@ private fun RatingRow(rating: Int?, onChange: (Int?) -> Unit) {
 @Composable
 private fun PhotosSection(
     photos: List<DraftPhoto>,
+    isEditing: Boolean,
     canAdd: Boolean,
     onAdd: () -> Unit,
     onRemove: (String) -> Unit,
@@ -360,14 +360,19 @@ private fun PhotosSection(
 ) {
     Section(
         "Photos",
-        "Optional, up to $MAX_PHOTOS_PER_SAVE. Lock a photo to keep it visible only to you."
+        if (isEditing) {
+            "Add up to $MAX_PHOTOS_PER_SAVE at a time. Lock your photos to keep them visible only to you. " +
+                    "Changes apply when you save."
+        } else {
+            "Optional, up to $MAX_PHOTOS_PER_SAVE. Lock a photo to keep it visible only to you."
+        }
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             photos.forEach { photo ->
-                PhotoThumbnail(
+                DraftPhotoThumbnail(
                     photo = photo,
                     onRemove = { onRemove(photo.id) },
                     onTogglePrivate = { onTogglePrivate(photo.id) }
@@ -386,69 +391,6 @@ private fun PhotosSection(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun PhotoThumbnail(photo: DraftPhoto, onRemove: () -> Unit, onTogglePrivate: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier
-                .size(88.dp)
-                .clip(MaterialTheme.shapes.small)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            if (photo.localPath == null) {
-                // Still being compressed.
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center).size(24.dp),
-                    strokeWidth = 2.dp
-                )
-            } else {
-                AsyncImage(
-                    model = photo.localPath,
-                    contentDescription = if (photo.isPrivate) "Private photo" else "Shared photo",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            ThumbnailButton(
-                onClick = onRemove,
-                modifier = Modifier.align(Alignment.TopEnd)
-            ) {
-                Icon(Icons.Default.Close, contentDescription = "Remove photo", modifier = Modifier.size(18.dp))
-            }
-            ThumbnailButton(
-                onClick = onTogglePrivate,
-                modifier = Modifier.align(Alignment.BottomStart)
-            ) {
-                Icon(
-                    imageVector = if (photo.isPrivate) Icons.Default.Lock else Icons.Default.LockOpen,
-                    contentDescription = if (photo.isPrivate) "Private. Tap to share" else "Shared. Tap to make private",
-                    tint = if (photo.isPrivate) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
-        Text(
-            text = if (photo.isPrivate) "Only me" else "Shared",
-            style = MaterialTheme.typography.labelSmall
-        )
-    }
-}
-
-/** A 36dp icon button on a small translucent disc, so it stays visible over any photo. */
-@Composable
-private fun ThumbnailButton(onClick: () -> Unit, modifier: Modifier, icon: @Composable () -> Unit) {
-    IconButton(onClick = onClick, modifier = modifier.size(36.dp)) {
-        Box(
-            modifier = Modifier
-                .size(26.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)),
-            contentAlignment = Alignment.Center
-        ) { icon() }
     }
 }
 
@@ -481,11 +423,12 @@ private fun MarkerSection(
             uiState.photos.filter { it.isReady && !it.isPrivate }.forEach { photo ->
                 MarkerOption(
                     label = "Photo marker",
-                    selected = uiState.markerStyle == MarkerStyle.Photo(photo.id),
+                    // By id: a saved marker also carries its photo's URL.
+                    selected = (uiState.markerStyle as? MarkerStyle.Photo)?.photoId == photo.id,
                     onClick = { onChange(MarkerStyle.Photo(photo.id)) }
                 ) {
                     AsyncImage(
-                        model = photo.localPath,
+                        model = photo.image,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier

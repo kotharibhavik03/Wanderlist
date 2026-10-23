@@ -68,6 +68,7 @@ service cloud.firestore {
     //   owner        - everything, including moving it to another of their collections
     //   collaborator - the place itself, but not its collection or its people
     //   any member   - leave, removing only themselves
+    //   anyone on it - add their own photos, delete their own (the owner deletes any)
     //   delete       - owner only
     match /places/{placeId} {
 
@@ -92,19 +93,40 @@ service cloud.firestore {
         return diff.addedKeys().size() == 0 && diff.changedKeys().size() == 0;
       }
 
-      // Exactly the caller's photos left the index: none of theirs remain, everyone else's do.
-      function removesExactlyMyPhotos() {
-        return photoIndexOnlyShrinks()
-          && !(request.auth.uid in photoIndex(request.resource.data).values())
-          && photoIndex(request.resource.data).size()
-               == photoIndex(resource.data).values().removeAll([request.auth.uid]).size();
+      // How many of the index's photos are the caller's.
+      function myPhotoCount(index) {
+        return index.size() - index.values().removeAll([request.auth.uid]).size();
       }
 
-      // The marker is unchanged, or it showed one of the caller's photos and is now the collection's.
-      function keepsMarkerOrDropsMyPhoto() {
+      // Only entries were added, and as many as the caller's count grew by: all of them are theirs.
+      function addsOnlyMyPhotos() {
+        let before = photoIndex(resource.data);
+        let after = photoIndex(request.resource.data);
+        let diff = after.diff(before);
+        return diff.removedKeys().size() == 0 && diff.changedKeys().size() == 0
+          && diff.addedKeys().size() == myPhotoCount(after) - myPhotoCount(before);
+      }
+
+      // Only entries were removed, and as many as the caller's count shrank by: all were theirs.
+      function removesOnlyMyPhotos() {
+        let before = photoIndex(resource.data);
+        let after = photoIndex(request.resource.data);
+        return photoIndexOnlyShrinks()
+          && after.diff(before).removedKeys().size() == myPhotoCount(before) - myPhotoCount(after);
+      }
+
+      // Leaving: all of the caller's photos left the index, nobody else's.
+      function removesExactlyMyPhotos() {
+        return removesOnlyMyPhotos() && myPhotoCount(photoIndex(request.resource.data)) == 0;
+      }
+
+      // The marker is unchanged, or it showed a photo this write removes from the index and is
+      // now the collection's. (With removesOnlyMyPhotos, that photo was the caller's.)
+      function keepsMarkerOrDropsRemovedPhoto() {
         return request.resource.data.marker == resource.data.marker
           || (resource.data.marker.type == 'PHOTO'
-              && photoIndex(resource.data).get(resource.data.marker.photoId, '') == request.auth.uid
+              && resource.data.marker.photoId in photoIndex(resource.data)
+              && !(resource.data.marker.photoId in photoIndex(request.resource.data))
               && request.resource.data.marker.type == 'COLLECTION');
       }
 
@@ -177,7 +199,8 @@ service cloud.firestore {
         && request.resource.data.createdAt == resource.data.createdAt
         && (
           // Owner: anything; a different collection must also be theirs, and they can't be a member.
-          // Photos only leave the index (with a removed member), never join it here.
+          // Photos only leave the index here (deleted, or with a removed member); adding the
+          // owner's own photos is the photos branch below.
           (resource.data.ownerId == request.auth.uid
             && !(myEmail() in request.resource.data.memberEmails)
             && photoIndexOnlyShrinks()
@@ -192,11 +215,18 @@ service cloud.firestore {
             && changedOnly(['members', 'memberEmails', 'collaboratorEmails', 'photoUploaders',
                             'marker', 'updatedAt'])
             && removesExactlyMyPhotos()
-            && keepsMarkerOrDropsMyPhoto()
+            && keepsMarkerOrDropsRemovedPhoto()
             && request.resource.data.memberEmails == resource.data.memberEmails.removeAll([myEmail()])
             && request.resource.data.collaboratorEmails
                  == resource.data.collaboratorEmails.removeAll([myEmail()])
             && request.resource.data.members.size() == resource.data.members.size() - 1)
+          // Anyone on the place: add their own photos to the index, or remove their own (with a
+          // marker that showed one). The photo documents are written in the same transaction.
+          || ((resource.data.ownerId == request.auth.uid || myEmail() in resource.data.memberEmails)
+            && ((changedOnly(['photoUploaders', 'updatedAt']) && addsOnlyMyPhotos())
+                || (changedOnly(['photoUploaders', 'marker', 'updatedAt'])
+                    && removesOnlyMyPhotos()
+                    && keepsMarkerOrDropsRemovedPhoto())))
         );
 
       allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
@@ -242,6 +272,16 @@ service cloud.firestore {
           && request.resource.data.uploaderId == request.auth.uid
           && isValidPhoto(request.resource.data)
           && canAddPhoto(getAfter(placePath()).data);
+
+        // The uploader decides who sees their photo: only isPrivate changes. The place's marker
+        // photo stays shared, because markers are visible to everyone on the place.
+        allow update: if signedIn()
+          && resource.data.uploaderId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isPrivate'])
+          && request.resource.data.isPrivate is bool
+          && canSeePlace(get(placePath()).data)
+          && !(request.resource.data.isPrivate == true
+               && get(placePath()).data.marker.get('photoId', null) == photoId);
 
         // The uploader removes their own photo; the owner can remove any photo on their place.
         // Deleting one that's already gone is allowed, so an interrupted cleanup can be retried.

@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Notes
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.Edit
@@ -66,6 +67,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rizz.wanderlist.domain.model.MAX_PHOTOS_PER_SAVE
 import com.rizz.wanderlist.domain.model.Place
 import com.rizz.wanderlist.domain.model.PlaceAccess
 import com.rizz.wanderlist.domain.model.PlaceCollection
@@ -78,6 +80,7 @@ import com.rizz.wanderlist.util.formatDate
 import com.rizz.wanderlist.views.photo.PhotoTile
 import com.rizz.wanderlist.views.photo.PhotoViewer
 import com.rizz.wanderlist.views.photo.ViewerPhoto
+import com.rizz.wanderlist.views.photo.rememberPhotoPicker
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -92,6 +95,12 @@ fun PlaceDetailRoute(
     val viewModel: PlaceDetailViewModel = koinViewModel(parameters = { parametersOf(placeId) })
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val currentOnPlaceRemoved by rememberUpdatedState(onPlaceRemoved)
+    // Asks for at most what's left of the limit (a picker can't take back extra choices).
+    val photoRoom = (uiState as? PlaceDetailUiState.Content)?.photoDraft?.room ?: MAX_PHOTOS_PER_SAVE
+    val photoPicker = rememberPhotoPicker(
+        maxItems = photoRoom.coerceAtLeast(1),
+        onPicked = viewModel::onPhotosPicked
+    )
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
@@ -107,9 +116,28 @@ fun PlaceDetailRoute(
         onEdit = { onEdit(placeId) },
         onLeaveConfirmed = viewModel::onLeaveConfirmed,
         onDeleteConfirmed = viewModel::onDeleteConfirmed,
-        onErrorShown = viewModel::onErrorShown
+        photoActions = PlacePhotoActions(
+            onPickPhotos = photoPicker::launch,
+            onDraftPhotoRemoved = viewModel::onDraftPhotoRemoved,
+            onDraftPhotoPrivacyToggled = viewModel::onDraftPhotoPrivacyToggled,
+            onAddPhotosConfirmed = viewModel::onAddPhotosConfirmed,
+            onAddPhotosDismissed = viewModel::onAddPhotosDismissed,
+            onDeletePhoto = viewModel::onDeletePhoto
+        ),
+        onMessageShown = viewModel::onMessageShown
     )
 }
+
+/** What the user can do with a place's photos on its detail screen. */
+class PlacePhotoActions(
+    /** Opens the system photo picker; what's picked goes to the "Add photos" sheet. */
+    val onPickPhotos: () -> Unit,
+    val onDraftPhotoRemoved: (photoId: String) -> Unit,
+    val onDraftPhotoPrivacyToggled: (photoId: String) -> Unit,
+    val onAddPhotosConfirmed: () -> Unit,
+    val onAddPhotosDismissed: () -> Unit,
+    val onDeletePhoto: (photoId: String) -> Unit
+)
 
 @Composable
 fun PlaceDetailScreen(
@@ -118,17 +146,18 @@ fun PlaceDetailScreen(
     onEdit: () -> Unit,
     onLeaveConfirmed: () -> Unit,
     onDeleteConfirmed: () -> Unit,
-    onErrorShown: () -> Unit
+    photoActions: PlacePhotoActions,
+    onMessageShown: () -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val content = uiState as? PlaceDetailUiState.Content
     var pendingAction by rememberSaveable { mutableStateOf<RemoveAction?>(null) }
 
-    LaunchedEffect(content?.errorMessage) {
-        content?.errorMessage?.let {
+    LaunchedEffect(content?.message) {
+        content?.message?.let {
             snackbarHostState.showSnackbar(it)
-            onErrorShown()
+            onMessageShown()
         }
     }
 
@@ -180,7 +209,14 @@ fun PlaceDetailScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
                 DetailsCard(uiState.place, uiState.collection)
-                PhotosSection(uiState.place.photos)
+                PhotosSection(
+                    photos = uiState.place.photos,
+                    // Everyone on the place can add their own photos.
+                    onAddPhotos = photoActions.onPickPhotos,
+                    deletablePhotoIds = uiState.deletablePhotoIds,
+                    deletingPhotoIds = uiState.deletingPhotoIds,
+                    onDeletePhoto = { photo -> photoActions.onDeletePhoto(photo.id) }
+                )
                 PeopleSection(uiState.people)
                 when {
                     uiState.canDelete -> RemoveButton(RemoveAction.DELETE, uiState.isBusy) {
@@ -192,6 +228,17 @@ fun PlaceDetailScreen(
                 }
             }
         }
+    }
+
+    content?.photoDraft?.let { draft ->
+        AddPhotosSheet(
+            draft = draft,
+            onPickMore = photoActions.onPickPhotos,
+            onRemove = photoActions.onDraftPhotoRemoved,
+            onTogglePrivate = photoActions.onDraftPhotoPrivacyToggled,
+            onConfirm = photoActions.onAddPhotosConfirmed,
+            onDismiss = photoActions.onAddPhotosDismissed
+        )
     }
 
     pendingAction?.let { action ->
@@ -415,12 +462,30 @@ private fun SectionTitle(text: String) {
     )
 }
 
-/** The place's photos in a row; tapping one opens the full-screen viewer at that photo. */
+/**
+ * The place's photos in a row; tapping one opens the full-screen viewer at that photo. With
+ * [onAddPhotos], an "Add photos" button; photos in [deletablePhotoIds] can be deleted from the viewer.
+ */
 @Composable
-internal fun PhotosSection(photos: List<PlacePhoto>) {
+internal fun PhotosSection(
+    photos: List<PlacePhoto>,
+    onAddPhotos: (() -> Unit)? = null,
+    deletablePhotoIds: Set<String> = emptySet(),
+    deletingPhotoIds: Set<String> = emptySet(),
+    onDeletePhoto: (PlacePhoto) -> Unit = {}
+) {
     var viewing by rememberSaveable { mutableStateOf<Int?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionTitle("Photos (${photos.size})")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.weight(1f)) { SectionTitle("Photos (${photos.size})") }
+            onAddPhotos?.let { onClick ->
+                TextButton(onClick = onClick) {
+                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add photos")
+                }
+            }
+        }
         if (photos.isEmpty()) {
             Text(
                 "No photos yet.",
@@ -442,9 +507,11 @@ internal fun PhotosSection(photos: List<PlacePhoto>) {
     }
     viewing?.let { index ->
         PhotoViewer(
-            photos = photos.map { ViewerPhoto(it) },
+            photos = photos.map { ViewerPhoto(it, canDelete = it.id in deletablePhotoIds) },
             initialIndex = index,
-            onDismiss = { viewing = null }
+            onDismiss = { viewing = null },
+            onDelete = onDeletePhoto,
+            deletingPhotoIds = deletingPhotoIds
         )
     }
 }

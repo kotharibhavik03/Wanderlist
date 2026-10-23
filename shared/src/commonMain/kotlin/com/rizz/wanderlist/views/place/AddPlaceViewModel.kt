@@ -8,13 +8,16 @@ import com.rizz.wanderlist.domain.model.MarkerStyle
 import com.rizz.wanderlist.domain.model.MemberRole
 import com.rizz.wanderlist.domain.model.NewPlace
 import com.rizz.wanderlist.domain.model.NewPlacePhoto
+import com.rizz.wanderlist.domain.model.PhotoChanges
 import com.rizz.wanderlist.domain.model.Place
 import com.rizz.wanderlist.domain.model.PlaceAccess
 import com.rizz.wanderlist.domain.model.PlaceDetails
 import com.rizz.wanderlist.domain.model.PlaceMember
+import com.rizz.wanderlist.domain.model.PlacePhoto
 import com.rizz.wanderlist.domain.model.PlaceStatus
 import com.rizz.wanderlist.domain.model.SelectedLocation
 import com.rizz.wanderlist.domain.model.accessFor
+import com.rizz.wanderlist.domain.model.canDeletePhoto
 import com.rizz.wanderlist.domain.repository.AuthRepository
 import com.rizz.wanderlist.domain.repository.PhotoCompressor
 import com.rizz.wanderlist.domain.repository.PlaceRepository
@@ -24,6 +27,8 @@ import com.rizz.wanderlist.domain.usecase.UpdatePlaceUseCase
 import com.rizz.wanderlist.domain.usecase.memberEmailProblem
 import com.rizz.wanderlist.util.pluralize
 import com.rizz.wanderlist.util.resultOf
+import com.rizz.wanderlist.views.photo.DraftPhoto
+import com.rizz.wanderlist.views.photo.PhotoUploadProgress
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.CoroutineScope
@@ -40,18 +45,6 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-/**
- * A photo in the draft. [localPath] is null while it's being compressed, then it's the small
- * JPEG that's shown here and uploaded on save. [id] becomes the saved photo's id, so a photo
- * marker chosen now still points at it after saving.
- */
-data class DraftPhoto(val id: String, val localPath: String? = null, val isPrivate: Boolean = false) {
-    val isReady: Boolean get() = localPath != null
-}
-
-/** How far the photo uploads have got while saving. */
-data class PhotoUploadProgress(val uploaded: Int, val total: Int)
 
 /** Whether the form is adding a new place or editing an existing one. */
 sealed interface DraftMode {
@@ -81,7 +74,10 @@ data class AddPlaceUiState(
     val visitedOnMillis: Long? = null,
     val rating: Int? = null,
     val selectedCollectionId: String? = null,
+    /** New photos and, when editing, the ones already on the place. */
     val photos: List<DraftPhoto> = emptyList(),
+    /** When editing: the place's photos as loaded, to work out what the save changes. */
+    val originalPhotos: Map<String, PlacePhoto> = emptyMap(),
     val markerStyle: MarkerStyle = MarkerStyle.CollectionDefault,
     val members: List<PlaceMember> = emptyList(),
     val isSaving: Boolean = false,
@@ -97,8 +93,21 @@ data class AddPlaceUiState(
 
     val isPreparingPhotos: Boolean get() = photos.any { !it.isReady }
 
-    /** How many more photos this save can take. */
-    val photoRoom: Int get() = (MAX_PHOTOS_PER_SAVE - photos.size).coerceAtLeast(0)
+    /** How many more new photos this save can take (photos already on the place don't count). */
+    val photoRoom: Int get() = (MAX_PHOTOS_PER_SAVE - photos.count { !it.isSaved }).coerceAtLeast(0)
+
+    /** What saving this edit does to the place's photos. */
+    val photoChanges: PhotoChanges
+        get() = PhotoChanges(
+            // canSave guarantees every new photo is compressed by then.
+            added = photos.filter { !it.isSaved }.mapNotNull { photo ->
+                photo.localPath?.let { NewPlacePhoto(photo.id, it, photo.isPrivate) }
+            },
+            privacy = photos
+                .filter { it.isSaved && originalPhotos[it.id]?.isPrivate?.let { was -> was != it.isPrivate } == true }
+                .associate { it.id to it.isPrivate },
+            removed = originalPhotos.keys - photos.map { it.id }.toSet()
+        )
 
     val canSave: Boolean
         get() = (mode == DraftMode.New || mode is DraftMode.Editing) &&
@@ -160,7 +169,7 @@ class AddPlaceViewModel(
                 // The draft was cleared or reused while loading; don't overwrite it.
                 if (state.mode != DraftMode.Loading(placeId)) return@update state
 
-                if (place == null || (access != PlaceAccess.OWNER && access != PlaceAccess.COLLABORATOR)) {
+                if (user == null || place == null || (access != PlaceAccess.OWNER && access != PlaceAccess.COLLABORATOR)) {
                     state.copy(mode = DraftMode.Unavailable(placeId))
                 } else {
                     state.copy(
@@ -177,9 +186,20 @@ class AddPlaceViewModel(
                         visitedOnMillis = place.visitedOnEpochMillis,
                         rating = place.rating,
                         selectedCollectionId = place.collectionId,
+                        // The photos this user can see: shared ones and their own private ones.
+                        photos = place.photos.map { photo ->
+                            DraftPhoto(
+                                id = photo.id,
+                                isPrivate = photo.isPrivate,
+                                url = photo.url,
+                                canRemove = place.canDeletePhoto(user, photo),
+                                canChangePrivacy = photo.uploaderId == user.id
+                            )
+                        },
+                        originalPhotos = place.photos.associateBy { it.id },
                         markerStyle = place.markerStyle,
                         // Older versions let owners add themselves; drop that so the save is accepted.
-                        members = place.members.filterNot { it.email == user?.email?.lowercase() }
+                        members = place.members.filterNot { it.email == user.email?.lowercase() }
                     )
                 }
             }
@@ -263,8 +283,10 @@ class AddPlaceViewModel(
         if (!attached) photoCompressor.discard(path)
     }
 
+    /** Removes a photo from the form; one already on the place is deleted when the edit is saved. */
     fun onPhotoRemoved(photoId: String) {
         val removed = _uiState.value.photos.firstOrNull { it.id == photoId } ?: return
+        if (!removed.canRemove || _uiState.value.isSaving) return
         _uiState.update { state ->
             val marker = state.markerStyle
             state.copy(
@@ -280,13 +302,14 @@ class AddPlaceViewModel(
     }
 
     fun onPhotoPrivacyToggled(photoId: String) = _uiState.update { state ->
+        if (state.isSaving || state.photos.none { it.id == photoId && it.canChangePrivacy }) return@update state
         val photos = state.photos.map {
             if (it.id == photoId) it.copy(isPrivate = !it.isPrivate) else it
         }
         // A private photo must never be the marker, because markers are visible to others.
         val marker = state.markerStyle
-        val markerStillValid = marker !is MarkerStyle.Photo ||
-                photos.any { it.id == marker.photoId && !it.isPrivate }
+        val markerStillValid = marker !is MarkerStyle.Photo || marker.photoId != photoId ||
+                photos.any { it.id == photoId && !it.isPrivate }
         state.copy(
             photos = photos,
             markerStyle = if (markerStillValid) marker else MarkerStyle.CollectionDefault
@@ -338,29 +361,26 @@ class AddPlaceViewModel(
             members = state.members
         )
 
-        // canSave guarantees every photo is compressed by now.
-        val photos = state.photos.mapNotNull { photo ->
-            photo.localPath?.let { NewPlacePhoto(photo.id, it, photo.isPrivate) }
+        // New photos to upload; canSave guarantees every one is compressed by now.
+        val photoChanges = state.photoChanges
+        val photos = photoChanges.added
+        val onPhotoUploaded: (Int) -> Unit = { uploaded ->
+            _uiState.update { it.copy(photoUpload = PhotoUploadProgress(uploaded, photos.size)) }
         }
         val save: suspend () -> Result<Place> = when (mode) {
             DraftMode.New -> {
-                {
-                    savePlace(NewPlace(details, photos)) { uploaded ->
-                        _uiState.update { it.copy(photoUpload = PhotoUploadProgress(uploaded, photos.size)) }
-                    }
-                }
+                { savePlace(NewPlace(details, photos), onPhotoUploaded) }
             }
             is DraftMode.Editing -> {
-                { updatePlace(mode.placeId, details) }
+                { updatePlace(mode.placeId, details, photoChanges, onPhotoUploaded) }
             }
             is DraftMode.Loading, is DraftMode.Unavailable -> return
         }
 
-        val photoCount = if (mode == DraftMode.New) photos.size else 0
         _uiState.update {
             it.copy(
                 isSaving = true,
-                photoUpload = if (photoCount > 0) PhotoUploadProgress(0, photoCount) else null,
+                photoUpload = if (photos.isNotEmpty()) PhotoUploadProgress(0, photos.size) else null,
                 errorMessage = null
             )
         }

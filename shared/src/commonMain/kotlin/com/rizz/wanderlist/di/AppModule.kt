@@ -59,5 +59,5 @@ val appModule = module {
     factory { SavePlaceUseCase(get()) }
     factory { UpdatePlaceUseCase(get()) }
     viewModel { (collectionId: String) -> CollectionDetailViewModel(collectionId, get(), get(), get()) }
-    viewModel { (placeId: String) -> PlaceDetailViewModel(placeId, get(), get(), get(), get()) }
+    viewModel { (placeId: String) -> PlaceDetailViewModel(placeId, get(), get(), get(), get(), get()) }
 }

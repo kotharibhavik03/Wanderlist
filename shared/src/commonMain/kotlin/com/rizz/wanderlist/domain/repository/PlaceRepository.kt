@@ -1,6 +1,7 @@
 package com.rizz.wanderlist.domain.repository
 
 import com.rizz.wanderlist.domain.model.NewPlace
+import com.rizz.wanderlist.domain.model.NewPlacePhoto
 import com.rizz.wanderlist.domain.model.Place
 import com.rizz.wanderlist.domain.model.PlaceDetails
 import com.rizz.wanderlist.domain.model.PlacePhoto
@@ -67,6 +68,26 @@ interface PlaceRepository {
      * Throws when not allowed.
      */
     suspend fun deletePlace(placeId: String)
+
+    /**
+     * Adds the signed-in user's photos to a place they own or are on (at most
+     * [com.rizz.wanderlist.domain.model.MAX_PHOTOS_PER_SAVE]). All or nothing, like
+     * [createPlace]. Photos already on the place are skipped, so a failed save can be retried.
+     * Throws when not allowed.
+     */
+    suspend fun addPhotos(placeId: String, photos: List<NewPlacePhoto>, onPhotoUploaded: (uploaded: Int) -> Unit = {})
+
+    /**
+     * Makes one of the signed-in user's own photos private (only they see it) or shared. A photo
+     * that is the place's marker can't be made private. Throws when not allowed.
+     */
+    suspend fun setPhotoPrivate(placeId: String, photoId: String, isPrivate: Boolean)
+
+    /**
+     * Deletes one photo, for everyone. Its uploader or the place's owner may do this; a marker
+     * showing it falls back to the collection's. Throws when not allowed.
+     */
+    suspend fun deletePhoto(placeId: String, photoId: String)
 
     /** Deletes every place the signed-in user owns in a collection, with their photos. */
     suspend fun deletePlacesInCollection(collectionId: String)

@@ -18,13 +18,21 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,18 +44,29 @@ import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import com.rizz.wanderlist.domain.model.PlacePhoto
 
-/** A photo in the viewer, with an optional caption (e.g. the place it belongs to). */
-internal data class ViewerPhoto(val photo: PlacePhoto, val caption: String? = null)
+/**
+ * A photo in the viewer, with an optional caption (e.g. the place it belongs to). [canDelete]
+ * shows a delete button on it.
+ */
+internal data class ViewerPhoto(val photo: PlacePhoto, val caption: String? = null, val canDelete: Boolean = false)
 
 /**
  * Full-screen photos on black: swipe between them, close with the button or Back. Shows
- * "2 of 5" and a lock on private photos. Closes itself if the photos disappear (e.g. the
- * place was deleted while it was open).
+ * "2 of 5" and a lock on private photos, and a delete button (after a confirmation) on photos
+ * the user may delete. Closes itself if the photos disappear (e.g. the last one was deleted).
  */
 @Composable
-internal fun PhotoViewer(photos: List<ViewerPhoto>, initialIndex: Int, onDismiss: () -> Unit) {
+internal fun PhotoViewer(
+    photos: List<ViewerPhoto>,
+    initialIndex: Int,
+    onDismiss: () -> Unit,
+    onDelete: (PlacePhoto) -> Unit = {},
+    /** Photos being deleted: their button shows a spinner instead. */
+    deletingPhotoIds: Set<String> = emptySet()
+) {
     LaunchedEffect(photos.isEmpty()) { if (photos.isEmpty()) onDismiss() }
     if (photos.isEmpty()) return
+    var confirmingDelete by remember { mutableStateOf<PlacePhoto?>(null) }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         val pagerState = rememberPagerState(initialPage = initialIndex.coerceIn(photos.indices)) { photos.size }
@@ -96,6 +115,18 @@ internal fun PhotoViewer(photos: List<ViewerPhoto>, initialIndex: Int, onDismiss
                         Text("Only you", color = Color.White, style = MaterialTheme.typography.labelLarge)
                     }
                 }
+                if (current.canDelete) {
+                    if (current.photo.id in deletingPhotoIds) {
+                        // Same footprint as the button, so the row doesn't shift.
+                        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                        }
+                    } else {
+                        IconButton(onClick = { confirmingDelete = current.photo }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete photo", tint = Color.White)
+                        }
+                    }
+                }
             }
 
             current.caption?.let { caption ->
@@ -116,6 +147,21 @@ internal fun PhotoViewer(photos: List<ViewerPhoto>, initialIndex: Int, onDismiss
                     )
                 }
             }
+        }
+
+        confirmingDelete?.let { photo ->
+            AlertDialog(
+                onDismissRequest = { confirmingDelete = null },
+                title = { Text("Delete this photo?") },
+                text = { Text("It will be removed from this place for everyone. This can't be undone.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmingDelete = null
+                        onDelete(photo)
+                    }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                },
+                dismissButton = { TextButton(onClick = { confirmingDelete = null }) { Text("Cancel") } }
+            )
         }
     }
 }

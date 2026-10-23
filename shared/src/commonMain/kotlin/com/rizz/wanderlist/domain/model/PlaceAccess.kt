@@ -18,3 +18,7 @@ fun Place.accessFor(user: User): PlaceAccess? {
         null -> null
     }
 }
+
+/** Everyone on a place can add their own photos. They can delete their own; the owner can delete any. */
+fun Place.canDeletePhoto(user: User, photo: PlacePhoto): Boolean =
+    photo.uploaderId == user.id || ownerId == user.id

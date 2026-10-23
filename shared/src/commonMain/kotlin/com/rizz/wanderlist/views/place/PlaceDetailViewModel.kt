@@ -2,19 +2,30 @@ package com.rizz.wanderlist.views.place
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rizz.wanderlist.domain.model.MAX_PHOTOS_PER_SAVE
 import com.rizz.wanderlist.domain.model.MemberRole
+import com.rizz.wanderlist.domain.model.NewPlacePhoto
 import com.rizz.wanderlist.domain.model.Place
 import com.rizz.wanderlist.domain.model.PlaceAccess
 import com.rizz.wanderlist.domain.model.PlaceCollection
 import com.rizz.wanderlist.domain.model.User
 import com.rizz.wanderlist.domain.model.UserProfile
 import com.rizz.wanderlist.domain.model.accessFor
+import com.rizz.wanderlist.domain.model.canDeletePhoto
 import com.rizz.wanderlist.domain.repository.AuthRepository
 import com.rizz.wanderlist.domain.repository.CollectionRepository
+import com.rizz.wanderlist.domain.repository.PhotoCompressor
 import com.rizz.wanderlist.domain.repository.PlaceRepository
 import com.rizz.wanderlist.domain.repository.ProfileRepository
+import com.rizz.wanderlist.util.pluralize
 import com.rizz.wanderlist.util.resultOf
+import com.rizz.wanderlist.views.photo.DraftPhoto
+import com.rizz.wanderlist.views.photo.PhotoUploadProgress
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +51,20 @@ data class PlacePerson(
     val hasJoined: Boolean
 )
 
+/** Photos picked to add to the place, shown in the "Add photos" sheet until they're uploaded. */
+data class PhotoDraft(
+    val photos: List<DraftPhoto> = emptyList(),
+    /** Set while uploading. */
+    val upload: PhotoUploadProgress? = null
+) {
+    val isUploading: Boolean get() = upload != null
+    val isPreparing: Boolean get() = photos.any { !it.isReady }
+
+    /** How many more photos this upload can take. */
+    val room: Int get() = (MAX_PHOTOS_PER_SAVE - photos.size).coerceAtLeast(0)
+    val canUpload: Boolean get() = photos.isNotEmpty() && !isPreparing && !isUploading
+}
+
 sealed interface PlaceDetailUiState {
     data object Loading : PlaceDetailUiState
 
@@ -53,9 +78,16 @@ sealed interface PlaceDetailUiState {
         val collection: PlaceCollection?,
         /** The owner first, then members in the order they were added. */
         val people: List<PlacePerson>,
+        /** The photos this user may delete: their own, or all of them for the owner. */
+        val deletablePhotoIds: Set<String> = emptySet(),
+        /** Photos being deleted right now. */
+        val deletingPhotoIds: Set<String> = emptySet(),
+        /** The "Add photos" sheet's draft; null while the sheet is closed. */
+        val photoDraft: PhotoDraft? = null,
         /** Leaving or deleting is in progress. */
         val isBusy: Boolean = false,
-        val errorMessage: String? = null
+        /** A one-off message for the user (a failure, or photos added); cleared once shown. */
+        val message: String? = null
     ) : PlaceDetailUiState {
         val canEdit: Boolean get() = access == PlaceAccess.OWNER || access == PlaceAccess.COLLABORATOR
         val canLeave: Boolean get() = access != PlaceAccess.OWNER
@@ -73,12 +105,22 @@ class PlaceDetailViewModel(
     private val placeRepository: PlaceRepository,
     collectionRepository: CollectionRepository,
     authRepository: AuthRepository,
-    profileRepository: ProfileRepository
+    profileRepository: ProfileRepository,
+    private val photoCompressor: PhotoCompressor
 ) : ViewModel() {
 
-    private data class ActionState(val inProgress: Boolean = false, val errorMessage: String? = null)
+    /** Everything the user is doing on this screen, as opposed to the place's data. */
+    private data class ActionState(
+        val inProgress: Boolean = false,
+        val message: String? = null,
+        val photoDraft: PhotoDraft? = null,
+        val deletingPhotoIds: Set<String> = emptySet()
+    )
 
     private val actionState = MutableStateFlow(ActionState())
+
+    /** Compressing and uploading the draft's photos; cancelled when the sheet is closed. */
+    private val draftWork = mutableListOf<Job>()
 
     private val _events = Channel<PlaceDetailEvent>(Channel.BUFFERED)
     val events: Flow<PlaceDetailEvent> = _events.receiveAsFlow()
@@ -114,8 +156,11 @@ class PlaceDetailViewModel(
                 } else {
                     null
                 },
+                deletablePhotoIds = place.photos.filter { place.canDeletePhoto(user, it) }.map { it.id }.toSet(),
+                deletingPhotoIds = action.deletingPhotoIds,
+                photoDraft = action.photoDraft,
                 isBusy = action.inProgress,
-                errorMessage = action.errorMessage
+                message = action.message
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlaceDetailUiState.Loading)
@@ -126,7 +171,145 @@ class PlaceDetailViewModel(
     fun onDeleteConfirmed() =
         removePlace(failureMessage = "Couldn't delete this place.") { placeRepository.deletePlace(placeId) }
 
-    fun onErrorShown() = actionState.update { it.copy(errorMessage = null) }
+    fun onMessageShown() = actionState.update { it.copy(message = null) }
+
+    /**
+     * Adds what the photo picker returned to the "Add photos" sheet, opening it if needed. Each
+     * photo shows up at once with a spinner and is compressed in the background, one at a time
+     * to keep memory low.
+     */
+    fun onPhotosPicked(sources: List<String>) {
+        if (sources.isEmpty()) return
+        val draft = actionState.value.photoDraft ?: PhotoDraft()
+        if (draft.isUploading) return
+        val picked = sources.distinct()
+        val accepted = picked.take(draft.room)
+        val drafts = accepted.map { DraftPhoto(id = newPhotoId()) }
+        actionState.update { state ->
+            state.copy(
+                photoDraft = draft.copy(photos = draft.photos + drafts),
+                message = if (accepted.size < picked.size) {
+                    "Added ${accepted.size} of ${picked.size} photos: you can add up to $MAX_PHOTOS_PER_SAVE at a time."
+                } else {
+                    state.message
+                }
+            )
+        }
+
+        launchDraftWork {
+            var failed = 0
+            drafts.zip(accepted).forEach { (photo, source) ->
+                resultOf { photoCompressor.compress(source) }.fold(
+                    onSuccess = { path -> attachCompressed(photo.id, path) },
+                    onFailure = {
+                        failed++
+                        updateDraft { it.copy(photos = it.photos.filterNot { draftPhoto -> draftPhoto.id == photo.id }) }
+                    }
+                )
+            }
+            if (failed > 0) {
+                actionState.update { it.copy(message = "${pluralize(failed, "photo")} couldn't be opened.") }
+            }
+        }
+    }
+
+    fun onDraftPhotoRemoved(photoId: String) {
+        val draft = actionState.value.photoDraft ?: return
+        if (draft.isUploading) return
+        val removed = draft.photos.firstOrNull { it.id == photoId } ?: return
+        updateDraft { it.copy(photos = it.photos.filterNot { photo -> photo.id == photoId }) }
+        removed.localPath?.let(photoCompressor::discard)
+    }
+
+    fun onDraftPhotoPrivacyToggled(photoId: String) = updateDraft { draft ->
+        if (draft.isUploading) return@updateDraft draft
+        draft.copy(photos = draft.photos.map { if (it.id == photoId) it.copy(isPrivate = !it.isPrivate) else it })
+    }
+
+    /** Uploads the draft. On success the sheet closes; on failure it stays, so the user can retry. */
+    fun onAddPhotosConfirmed() {
+        val draft = actionState.value.photoDraft ?: return
+        if (!draft.canUpload) return
+        // canUpload guarantees every photo is compressed by now.
+        val photos = draft.photos.mapNotNull { photo -> photo.localPath?.let { NewPlacePhoto(photo.id, it, photo.isPrivate) } }
+        updateDraft { it.copy(upload = PhotoUploadProgress(0, photos.size)) }
+
+        launchDraftWork {
+            resultOf {
+                placeRepository.addPhotos(placeId, photos) { uploaded ->
+                    updateDraft { it.copy(upload = PhotoUploadProgress(uploaded, photos.size)) }
+                }
+            }.fold(
+                onSuccess = {
+                    // Uploaded: the compressed copies aren't needed any more.
+                    photos.forEach { photoCompressor.discard(it.localPath) }
+                    actionState.update {
+                        it.copy(photoDraft = null, message = "Added ${pluralize(photos.size, "photo")}.")
+                    }
+                },
+                onFailure = { error ->
+                    updateDraft { it.copy(upload = null) }
+                    actionState.update { it.copy(message = error.message ?: "Couldn't add the photos.") }
+                }
+            )
+        }
+    }
+
+    /** Closes the "Add photos" sheet without uploading. Ignored while uploading. */
+    fun onAddPhotosDismissed() {
+        val draft = actionState.value.photoDraft ?: return
+        if (draft.isUploading) return
+        discardDraft()
+    }
+
+    fun onDeletePhoto(photoId: String) {
+        if (photoId in actionState.value.deletingPhotoIds) return
+        actionState.update { it.copy(deletingPhotoIds = it.deletingPhotoIds + photoId) }
+        viewModelScope.launch {
+            val result = resultOf { placeRepository.deletePhoto(placeId, photoId) }
+            actionState.update { state ->
+                state.copy(
+                    deletingPhotoIds = state.deletingPhotoIds - photoId,
+                    message = result.exceptionOrNull()?.let { it.message ?: "Couldn't delete the photo." } ?: state.message
+                )
+            }
+        }
+    }
+
+    override fun onCleared() {
+        // viewModelScope is cancelled already; only the compressed files are left to clean up.
+        discardDraft()
+    }
+
+    private fun updateDraft(transform: (PhotoDraft) -> PhotoDraft) = actionState.update { state ->
+        state.photoDraft?.let { state.copy(photoDraft = transform(it)) } ?: state
+    }
+
+    /** Puts a compressed file on its draft photo, or deletes it if the photo was removed meanwhile. */
+    private fun attachCompressed(photoId: String, path: String) {
+        var attached = false
+        updateDraft { draft ->
+            attached = draft.photos.any { it.id == photoId }
+            draft.copy(photos = draft.photos.map { if (it.id == photoId) it.copy(localPath = path) else it })
+        }
+        if (!attached) photoCompressor.discard(path)
+    }
+
+    /** Stops compressing or uploading, deletes the compressed files and closes the sheet. */
+    private fun discardDraft() {
+        draftWork.forEach { it.cancel() }
+        draftWork.clear()
+        actionState.value.photoDraft?.photos?.forEach { photo -> photo.localPath?.let(photoCompressor::discard) }
+        actionState.update { it.copy(photoDraft = null) }
+    }
+
+    private fun launchDraftWork(block: suspend CoroutineScope.() -> Unit) {
+        draftWork.removeAll { it.isCompleted }
+        draftWork += viewModelScope.launch(block = block)
+    }
+
+    @OptIn(ExperimentalUuidApi::class)
+    private fun newPhotoId(): String = Uuid.random().toHexString()
 
     private fun emailsOf(place: Place): Set<String> =
         setOfNotNull(place.ownerEmail) + place.members.map { it.email }
@@ -167,15 +350,15 @@ class PlaceDetailViewModel(
     /** Runs a leave or delete, then closes the screen on success or shows why it failed. */
     private fun removePlace(failureMessage: String, action: suspend () -> Unit) {
         if (actionState.value.inProgress) return
-        actionState.value = ActionState(inProgress = true)
+        actionState.update { it.copy(inProgress = true) }
         viewModelScope.launch {
             resultOf { action() }.fold(
                 onSuccess = {
-                    actionState.value = ActionState()
+                    actionState.update { it.copy(inProgress = false) }
                     _events.send(PlaceDetailEvent.PlaceRemoved)
                 },
                 onFailure = { error ->
-                    actionState.value = ActionState(errorMessage = error.message ?: failureMessage)
+                    actionState.update { it.copy(inProgress = false, message = error.message ?: failureMessage) }
                 }
             )
         }

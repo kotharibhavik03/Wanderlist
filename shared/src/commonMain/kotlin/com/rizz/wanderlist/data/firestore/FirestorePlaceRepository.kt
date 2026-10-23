@@ -1,8 +1,10 @@
 package com.rizz.wanderlist.data.firestore
 
+import com.rizz.wanderlist.domain.model.MAX_PHOTOS_PER_SAVE
 import com.rizz.wanderlist.domain.model.MarkerStyle
 import com.rizz.wanderlist.domain.model.MemberRole
 import com.rizz.wanderlist.domain.model.NewPlace
+import com.rizz.wanderlist.domain.model.NewPlacePhoto
 import com.rizz.wanderlist.domain.model.Place
 import com.rizz.wanderlist.domain.model.PlaceAccess
 import com.rizz.wanderlist.domain.model.PlaceDetails
@@ -90,19 +92,9 @@ class FirestorePlaceRepository(
         val now = now()
         val reference = places.document // new auto-id, known before anything is written
 
-        val uploadedPaths = mutableListOf<String>()
-        try {
-            // 1. The files first, one at a time so progress is simple and memory stays low.
-            val photos = newPlace.photos.mapIndexed { index, photo ->
-                val path = photoStoragePath(reference.id, owner.id, photo.id)
-                val url = photoStorage.upload(path, photo.localPath)
-                uploadedPaths += path
-                onPhotoUploaded(index + 1)
-                photo.id to PhotoDocument(uploaderId = owner.id, url = url, isPrivate = photo.isPrivate, createdAt = now)
-            }
-
-            // 2. The place and its photo documents in one batch: they appear together or not at all.
-            //    A photo marker stores its photo's URL, so the map can draw it without the photos.
+        return withUploadedPhotos(reference.id, owner, newPlace.photos, now, onPhotoUploaded) { photos ->
+            // The place and its photo documents in one batch: they appear together or not at all.
+            // A photo marker stores its photo's URL, so the map can draw it without the photos.
             val details = newPlace.details.withMarkerPhotoUrl { photoId ->
                 photos.firstOrNull { (id, photo) -> id == photoId && !photo.isPrivate }?.second?.url
             }
@@ -120,14 +112,7 @@ class FirestorePlaceRepository(
             }
             batch.commit()
 
-            return document.toDomain(reference.id).copy(photos = photos.map { (id, photo) -> photo.toDomain(id) })
-        } catch (e: Throwable) {
-            // Nothing was saved, so the uploaded files would be orphans. Clean up even when
-            // the save was cancelled; a file that can't be deleted now is left behind.
-            withContext(NonCancellable) {
-                uploadedPaths.forEach { path -> runCatching { photoStorage.delete(path) } }
-            }
-            throw e
+            document.toDomain(reference.id).copy(photos = photos.map { (id, photo) -> photo.toDomain(id) })
         }
     }
 
@@ -221,6 +206,82 @@ class FirestorePlaceRepository(
         deleteWithPhotos(placeId, document, user)
     }
 
+    override suspend fun addPhotos(placeId: String, photos: List<NewPlacePhoto>, onPhotoUploaded: (uploaded: Int) -> Unit) {
+        require(photos.size <= MAX_PHOTOS_PER_SAVE) { "You can add up to $MAX_PHOTOS_PER_SAVE photos at a time." }
+        if (photos.isEmpty()) return
+        val user = requireSignedInUser()
+        val reference = places.document(placeId)
+        // Check before uploading anything, so someone who was removed doesn't upload in vain.
+        val place = requireOnPlace(reference.get().takeIf { it.exists }?.data<PlaceDocument>(), placeId, user)
+        // Photos an earlier try of the same save already added (their files can't be overwritten).
+        val toAdd = photos.filterNot { it.id in place.photoUploaders }
+        if (toAdd.isEmpty()) return
+
+        withUploadedPhotos(placeId, user, toAdd, now(), onPhotoUploaded) { uploaded ->
+            // A transaction: the index is read and extended in one step, so photos two people
+            // add at the same moment don't overwrite each other's entries.
+            firestore.runTransaction {
+                val snapshot = get(reference)
+                val current = requireOnPlace(snapshot.takeIf { it.exists }?.data(PlaceDocument.serializer()), placeId, user)
+                val updated = current.copy(
+                    photoUploaders = current.photoUploaders + uploaded.associate { (photoId, _) -> photoId to user.id },
+                    updatedAt = now()
+                )
+                // Only the index: the rules let anyone on the place add their own photos to it.
+                set(reference, PlaceDocument.serializer(), updated, *PHOTO_INDEX_FIELDS) { encodeDefaults = true }
+                uploaded.forEach { (photoId, photo) ->
+                    set(reference.collection(PHOTOS).document(photoId), PhotoDocument.serializer(), photo) {
+                        encodeDefaults = true
+                    }
+                }
+            }
+        }
+    }
+
+    override suspend fun setPhotoPrivate(placeId: String, photoId: String, isPrivate: Boolean) {
+        val user = requireSignedInUser()
+        val reference = places.document(placeId)
+        val photoReference = reference.collection(PHOTOS).document(photoId)
+        // A transaction, so the marker check and the change see the same place.
+        firestore.runTransaction {
+            val current = requireOnPlace(get(reference).takeIf { it.exists }?.data(PlaceDocument.serializer()), placeId, user)
+            val snapshot = get(photoReference)
+            check(snapshot.exists) { "This photo was deleted." }
+            val photo = snapshot.data(PhotoDocument.serializer())
+            check(photo.uploaderId == user.id) { "Only the person who added a photo can change who sees it." }
+            if (photo.isPrivate == isPrivate) return@runTransaction
+            // Markers are visible to everyone on the place, so the marker's photo stays shared.
+            val isMarker = current.marker.type == MarkerDocument.TYPE_PHOTO && current.marker.photoId == photoId
+            check(!(isPrivate && isMarker)) { "This photo is the place's marker, so it has to stay shared." }
+            // Only that field: the rules let the uploader change nothing else.
+            set(photoReference, PhotoDocument.serializer(), photo.copy(isPrivate = isPrivate), "isPrivate") {
+                encodeDefaults = true
+            }
+        }
+    }
+
+    override suspend fun deletePhoto(placeId: String, photoId: String) {
+        val user = requireSignedInUser()
+        val reference = places.document(placeId)
+        val photoReference = reference.collection(PHOTOS).document(photoId)
+        // The document and the index entry go together; the file after, once nobody can find it.
+        val uploaderId = firestore.runTransaction {
+            val snapshot = get(reference)
+            val current = requireOnPlace(snapshot.takeIf { it.exists }?.data(PlaceDocument.serializer()), placeId, user)
+            val photoSnapshot = get(photoReference)
+            if (!photoSnapshot.exists) return@runTransaction null // already deleted
+            val photo = photoSnapshot.data(PhotoDocument.serializer())
+            check(photo.uploaderId == user.id || current.ownerId == user.id) { "You can only delete photos you added." }
+
+            val updated = current.withoutPhotos(setOf(photoId)).copy(updatedAt = now())
+            val fields = if (updated.marker == current.marker) PHOTO_INDEX_FIELDS else PHOTO_INDEX_FIELDS + "marker"
+            set(reference, PlaceDocument.serializer(), updated, *fields) { encodeDefaults = true }
+            delete(photoReference)
+            photo.uploaderId
+        }
+        uploaderId?.let { deletePhotoFiles(placeId, mapOf(photoId to it)) }
+    }
+
     override suspend fun deletePlacesInCollection(collectionId: String) {
         val user = requireSignedInUser()
         val snapshot = places
@@ -231,6 +292,45 @@ class FirestorePlaceRepository(
         snapshot.documents.forEach { document ->
             deleteWithPhotos(document.id, document.data<PlaceDocument>(), user)
         }
+    }
+
+    /**
+     * Uploads [photos] as [uploader]'s, one at a time so progress is simple and memory stays low,
+     * then runs [save] with their documents (photo id to document). If anything fails, or the
+     * work is cancelled, the uploaded files are deleted again: nothing was saved, so they'd be
+     * orphans. A file that can't be deleted right then is left behind.
+     */
+    private suspend fun <T> withUploadedPhotos(
+        placeId: String,
+        uploader: User,
+        photos: List<NewPlacePhoto>,
+        createdAt: Long,
+        onPhotoUploaded: (uploaded: Int) -> Unit,
+        save: suspend (List<Pair<String, PhotoDocument>>) -> T
+    ): T {
+        val uploadedPaths = mutableListOf<String>()
+        try {
+            val documents = photos.mapIndexed { index, photo ->
+                val path = photoStoragePath(placeId, uploader.id, photo.id)
+                val url = photoStorage.upload(path, photo.localPath)
+                uploadedPaths += path
+                onPhotoUploaded(index + 1)
+                photo.id to PhotoDocument(uploaderId = uploader.id, url = url, isPrivate = photo.isPrivate, createdAt = createdAt)
+            }
+            return save(documents)
+        } catch (e: Throwable) {
+            withContext(NonCancellable) {
+                uploadedPaths.forEach { path -> runCatching { photoStorage.delete(path) } }
+            }
+            throw e
+        }
+    }
+
+    /** [place] if it exists and [user] is its owner or one of its members; otherwise a clear error. */
+    private fun requireOnPlace(place: PlaceDocument?, placeId: String, user: User): PlaceDocument {
+        checkNotNull(place) { "This place no longer exists." }
+        checkNotNull(place.toDomain(placeId).accessFor(user)) { "This place is no longer shared with you." }
+        return place
     }
 
     /**

@@ -139,6 +139,12 @@ internal val COLLABORATOR_EDIT_FIELDS = arrayOf(
  */
 internal val MEMBERSHIP_FIELDS = arrayOf("members", "memberEmails", "collaboratorEmails", "photoUploaders", "updatedAt")
 
+/**
+ * The only fields adding or deleting a photo writes ("marker" too when it showed the deleted
+ * photo). Must match the photos branch of the places update rule.
+ */
+internal val PHOTO_INDEX_FIELDS = arrayOf("photoUploaders", "updatedAt")
+
 /** Who owns a place, as stored on it. */
 internal data class PlaceOwner(val id: String, val name: String?, val email: String?)
 
