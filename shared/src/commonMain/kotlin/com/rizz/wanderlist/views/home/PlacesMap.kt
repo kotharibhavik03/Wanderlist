@@ -30,6 +30,7 @@ import com.rizz.wanderlist.domain.model.GeoPoint
 import com.rizz.wanderlist.domain.model.SelectedLocation
 import com.rizz.wanderlist.views.image.rememberLoadedPhoto
 import com.rizz.wanderlist.views.map.AppMapUiSettings
+import com.rizz.wanderlist.views.map.GoogleLogoTapBlocker
 import com.rizz.wanderlist.views.map.WorldView
 import com.rizz.wanderlist.views.map.animateOrJump
 import com.rizz.wanderlist.views.map.rememberMapProperties
@@ -176,6 +177,7 @@ internal fun PlacesMap(
             }
         }
 
+        GoogleLogoTapBlocker(contentPadding)
     }
 }
 

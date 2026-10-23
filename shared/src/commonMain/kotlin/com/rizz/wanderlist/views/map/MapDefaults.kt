@@ -1,8 +1,18 @@
 package com.rizz.wanderlist.views.map
 
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.dp
 import com.rizz.wanderlist.views.theme.DarkMapStyleJson
 import com.rizz.wanderlist.views.theme.isDark
 import eu.buney.maps.CameraMoveStartedReason
@@ -44,6 +54,29 @@ internal val AppMapUiSettings = MapUiSettings(
     zoomControlsEnabled = false,
     myLocationButtonEnabled = false
 )
+
+/**
+ * Catches taps on Google's logo, which would otherwise open the Google Maps app. Draw it over the
+ * map, filling the same area, with the map's own [contentPadding]: the map keeps its logo in the
+ * bottom-start corner of the padded area, so this follows it. The logo itself stays visible and
+ * unchanged (the Maps terms require that); only taps on it do nothing. Compose doesn't pass
+ * touches through to what's underneath, so the map never sees them.
+ */
+@Composable
+internal fun GoogleLogoTapBlocker(contentPadding: PaddingValues, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxSize().padding(contentPadding)) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .size(width = LogoTapAreaWidth, height = LogoTapAreaHeight)
+                .pointerInput(Unit) { detectTapGestures { } }
+        )
+    }
+}
+
+/** Covers the logo and its margin on both platforms (Android's is a little larger than iOS's). */
+private val LogoTapAreaWidth = 110.dp
+private val LogoTapAreaHeight = 72.dp
 
 /**
  * Animates to [update]. If something other than the user's finger interrupts the animation (for

@@ -65,6 +65,7 @@ import com.rizz.wanderlist.util.formatCoordinates
 import com.rizz.wanderlist.views.location.MyLocationButton
 import com.rizz.wanderlist.views.location.rememberMyLocationClick
 import com.rizz.wanderlist.views.map.AppMapUiSettings
+import com.rizz.wanderlist.views.map.GoogleLogoTapBlocker
 import com.rizz.wanderlist.views.map.WorldView
 import com.rizz.wanderlist.views.map.animateOrJump
 import com.rizz.wanderlist.views.map.rememberMapProperties
@@ -192,6 +193,7 @@ fun MapPickerScreen(
             onMapClick = { focusManager.clearFocus() },
             onMapLoaded = { mapLoaded = true }
         )
+        GoogleLogoTapBlocker(PaddingValues(top = topHeight, bottom = bottomHeight))
 
         // The pin, centred in the visible map area. It lifts while the map moves.
         val lift by animateDpAsState(if (cameraState.isMoving) 12.dp else 0.dp, label = "pin lift")
