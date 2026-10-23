@@ -21,6 +21,9 @@ androidx-savedstate = "1.4.0"
 kotlinx-serialization = "1.11.0"
 
 kmpauth = "3.0.6"
+# Must equal the GitLive version KMPAuth resolves (3.0.6 -> 3.0.0-alpha01). A newer GitLive
+# library would silently upgrade the shared firebase-app/common for KMPAuth too.
+gitliveFirebase = "3.0.0-alpha01"
 googleServices = "4.5.0"
 
 [libraries]
@@ -56,6 +59,7 @@ kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 kmpauth-google = { module = "io.github.mirzemehdi:kmpauth-google", version.ref = "kmpauth" }
 kmpauth-firebase = { module = "io.github.mirzemehdi:kmpauth-firebase", version.ref = "kmpauth" }
 kmpauth-uihelper = { module = "io.github.mirzemehdi:kmpauth-uihelper", version.ref = "kmpauth" }
+gitlive-firebase-firestore = { module = "dev.gitlive:firebase-firestore", version.ref = "gitliveFirebase" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
