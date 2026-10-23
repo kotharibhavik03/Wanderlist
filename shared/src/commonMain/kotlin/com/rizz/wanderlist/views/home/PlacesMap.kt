@@ -1,7 +1,9 @@
 package com.rizz.wanderlist.views.home
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -19,7 +21,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rizz.wanderlist.domain.model.GeoPoint
 import com.rizz.wanderlist.domain.model.SelectedLocation
@@ -143,8 +148,8 @@ internal fun PlacesMap(
                         title = place.displayName,
                         // What screen readers announce for the marker (it's otherwise an unnamed button).
                         contentDescription = place.displayName,
-                        // Centred on the spot: the badge is a circle, not a pin with a point.
-                        anchor = Offset(0.5f, 0.5f),
+                        // The tail's tip is the spot: bottom centre of the marker image.
+                        anchor = Offset(0.5f, 1f),
                         // The selected marker draws on top of its neighbours.
                         zIndex = if (isSelected) 1f else 0f,
                         onClick = {
@@ -175,24 +180,57 @@ internal fun PlacesMap(
 }
 
 /**
- * The place's marker on a ring, so it stands out from any map background. The selected one is
- * larger with a primary-coloured ring.
+ * The place's marker on a ring, so it stands out from any map background, with a small tail
+ * pointing at the spot. The selected one is larger with a primary-coloured ring and tail.
  */
 @Composable
 private fun MapBadge(item: HomePlace, isSelected: Boolean, photo: Painter?) {
     val ringColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
     val badgeSize = if (isSelected) SelectedBadgeSize else 40.dp
-    Box(
-        modifier = Modifier
-            .size(badgeSize + 6.dp)
-            .background(ringColor, CircleShape)
-            .padding(3.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        // No URL here, only the loaded photo: until it arrives the marker shows the collection badge.
-        PlaceMarker(item.place.markerStyle, item.collection, photoUrl = null, size = badgeSize, loadedPhoto = photo)
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier
+                .size(badgeSize + RingWidth * 2)
+                .background(ringColor, CircleShape)
+                .padding(RingWidth),
+            contentAlignment = Alignment.Center
+        ) {
+            // No URL here, only the loaded photo: until it arrives the marker shows the collection badge.
+            PlaceMarker(item.place.markerStyle, item.collection, photoUrl = null, size = badgeSize, loadedPhoto = photo)
+        }
+        MarkerTail(ringColor, height = if (isSelected) 10.dp else 8.dp)
     }
 }
+
+/**
+ * A small triangle under the ring, pointing down at the spot. Its top edge starts a little
+ * inside the ring, so ring and tail read as one shape with no seam where the circle curves away.
+ */
+@Composable
+private fun MarkerTail(color: Color, height: Dp) {
+    Canvas(modifier = Modifier.size(width = TailWidth, height = height)) {
+        val overlap = TailOverlap.toPx()
+        val tail = Path().apply {
+            moveTo(0f, -overlap)
+            lineTo(size.width, -overlap)
+            lineTo(size.width / 2f, size.height)
+            close()
+        }
+        drawPath(tail, color)
+    }
+}
+
+/** The ring around a marker badge. */
+private val RingWidth = 3.dp
+
+/** The tail's width where it meets the ring. */
+private val TailWidth = 14.dp
+
+/**
+ * How far the tail reaches up into the ring. Less than [RingWidth], so it never covers the badge;
+ * enough to cover the gap at its corners, where the ring curves up away from them.
+ */
+private val TailOverlap = 2.5.dp
 
 /** One place: centre on it. Several: fit them all, with room so edge markers aren't cut off. */
 private fun cameraUpdateFor(places: List<HomePlace>): CameraUpdate {
