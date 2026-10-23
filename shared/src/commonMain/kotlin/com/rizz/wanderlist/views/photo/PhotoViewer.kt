@@ -36,12 +36,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import coil3.compose.AsyncImage
 import com.rizz.wanderlist.domain.model.PlacePhoto
 
 /**
@@ -51,7 +49,8 @@ import com.rizz.wanderlist.domain.model.PlacePhoto
 internal data class ViewerPhoto(val photo: PlacePhoto, val caption: String? = null, val canDelete: Boolean = false)
 
 /**
- * Full-screen photos on black: swipe between them, close with the button or Back. Shows
+ * Full-screen photos on black: swipe between them, pinch or double-tap to zoom, close with
+ * the button or Back. Shows
  * "2 of 5" and a lock on private photos, and a delete button (after a confirmation) on photos
  * the user may delete. Closes itself if the photos disappear (e.g. the last one was deleted).
  */
@@ -67,6 +66,7 @@ internal fun PhotoViewer(
     LaunchedEffect(photos.isEmpty()) { if (photos.isEmpty()) onDismiss() }
     if (photos.isEmpty()) return
     var confirmingDelete by remember { mutableStateOf<PlacePhoto?>(null) }
+    var isZoomed by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         val pagerState = rememberPagerState(initialPage = initialIndex.coerceIn(photos.indices)) { photos.size }
@@ -77,13 +77,15 @@ internal fun PhotoViewer(
             HorizontalPager(
                 state = pagerState,
                 key = { photos[it].photo.id },
+                // A zoomed photo pans with one finger instead of swiping to the next one.
+                userScrollEnabled = !isZoomed,
                 modifier = Modifier.fillMaxSize()
             ) { page ->
-                AsyncImage(
+                ZoomableImage(
                     model = photos[page].photo.url,
                     contentDescription = photos[page].caption ?: "Photo ${page + 1} of ${photos.size}",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize()
+                    isCurrentPage = page == pagerState.currentPage,
+                    onZoomedChange = { zoomed -> if (page == pagerState.currentPage) isZoomed = zoomed }
                 )
             }
 
