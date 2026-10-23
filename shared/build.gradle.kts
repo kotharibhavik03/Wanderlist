@@ -48,6 +48,12 @@ kotlin {
             // Location permission prompt (Activity result API) and the device's position.
             implementation(libs.androidx.activity.compose)
             implementation(libs.play.services.location)
+            // Coil's network layer on Android.
+            implementation(libs.ktor.client.okhttp)
+        }
+        iosMain.dependencies {
+            // Coil's network layer on iOS.
+            implementation(libs.ktor.client.darwin)
         }
         commonMain.dependencies {
 
@@ -78,6 +84,9 @@ kotlin {
             implementation(libs.kmpauth.firebase)
             implementation(libs.kmpauth.uihelper)
             implementation(libs.gitlive.firebase.firestore)
+            implementation(libs.gitlive.firebase.storage)
+            implementation(libs.coil.compose)
+            implementation(libs.coil.network.ktor3)
             implementation(libs.kmp.maps.compose)
         }
         commonTest.dependencies {

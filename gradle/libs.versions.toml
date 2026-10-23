@@ -31,6 +31,9 @@ gitliveFirebase = "3.0.0-alpha01"
 kmpMapsCompose = "0.7.0"
 # Android's Fused Location provider, for "use my current location".
 playServicesLocation = "21.4.0"
+# Image loading (built with Kotlin 2.4.10 / Compose 1.12.0); Ktor is its network layer (needs >= 3.1).
+coil = "3.6.3"
+ktor = "3.5.2"
 googleServices = "4.5.0"
 
 [libraries]
@@ -68,6 +71,11 @@ kmpauth-google = { module = "io.github.mirzemehdi:kmpauth-google", version.ref =
 kmpauth-firebase = { module = "io.github.mirzemehdi:kmpauth-firebase", version.ref = "kmpauth" }
 kmpauth-uihelper = { module = "io.github.mirzemehdi:kmpauth-uihelper", version.ref = "kmpauth" }
 gitlive-firebase-firestore = { module = "dev.gitlive:firebase-firestore", version.ref = "gitliveFirebase" }
+gitlive-firebase-storage = { module = "dev.gitlive:firebase-storage", version.ref = "gitliveFirebase" }
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
+coil-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 kmp-maps-compose = { module = "eu.buney.maps:kmp-maps-compose", version.ref = "kmpMapsCompose" }
 play-services-location = { module = "com.google.android.gms:play-services-location", version.ref = "playServicesLocation" }
 
