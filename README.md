@@ -14,7 +14,8 @@ A travel journal for Android and iOS, built from one Kotlin Multiplatform codeba
 | Collection page with places and an "All photos" grid | Done |
 | Edit, move between collections, and delete places; delete collections | Done |
 | Google Maps on Home with collection-styled markers, filtered by collection | Done |
-| Marker bottom sheet, search + pin-drop location picker | Planned |
+| Marker bottom sheet; search anywhere (free phone search) and save what you find | Done |
+| Pin-drop location picker in Add Place | Planned |
 | Photos per place, with private photos visible only to their uploader | Planned |
 | Share a place by email as Collaborator or "Visited with"; "Shared with me"; leave a place | Done |
 | Directions via Google Maps / Apple Maps | Done |

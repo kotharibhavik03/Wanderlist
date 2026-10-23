@@ -188,7 +188,12 @@ fun AppNavigation(onSignOut: () -> Unit) {
                     HomeRoute(
                         bottomBarPadding = bottomBarPadding,
                         onAddClick = { backStack.add(Route.AddPlace) },
-                        onPlaceClick = { id -> backStack.add(Route.PlaceDetail(id)) }
+                        onPlaceClick = { id -> backStack.add(Route.PlaceDetail(id)) },
+                        onSaveLocation = { location ->
+                            // The draft is empty here (it's cleared whenever Add Place closes).
+                            addPlaceViewModel.onLocationSelected(location)
+                            backStack.add(Route.AddPlace)
+                        }
                     )
                 }
 

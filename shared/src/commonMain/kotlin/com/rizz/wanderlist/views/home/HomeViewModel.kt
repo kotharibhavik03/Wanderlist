@@ -5,9 +5,20 @@ import androidx.lifecycle.viewModelScope
 import com.rizz.wanderlist.domain.model.CollectionSummary
 import com.rizz.wanderlist.domain.model.Place
 import com.rizz.wanderlist.domain.model.PlaceCollection
+import com.rizz.wanderlist.domain.model.SelectedLocation
 import com.rizz.wanderlist.domain.repository.AuthRepository
 import com.rizz.wanderlist.domain.repository.PlaceRepository
+import com.rizz.wanderlist.domain.repository.PlaceSearch
 import com.rizz.wanderlist.domain.usecase.ObserveCollectionSummariesUseCase
+import com.rizz.wanderlist.util.resultOf
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -30,7 +41,13 @@ data class HomeUiState(
     /** Places matching the filter chips: what the map will show as markers. */
     val places: List<HomePlace> = emptyList(),
     /** Places matching the filter chips and the search text. Empty while not searching. */
-    val searchResults: List<HomePlace> = emptyList()
+    val searchResults: List<HomePlace> = emptyList(),
+    /** Locations anywhere matching the search text, from the phone's search. */
+    val otherLocations: List<SelectedLocation> = emptyList(),
+    val isSearchingLocations: Boolean = false,
+    val locationSearchFailed: Boolean = false,
+    /** A searched location shown on the map with a temporary pin, not (yet) one of the user's places. */
+    val pickedLocation: SelectedLocation? = null
 ) {
     /** No chip selected means "All". */
     val showingAll: Boolean get() = selectedCollectionIds.isEmpty() && !sharedSelected
@@ -40,23 +57,58 @@ data class HomeUiState(
 class HomeViewModel(
     placeRepository: PlaceRepository,
     observeCollectionSummaries: ObserveCollectionSummariesUseCase,
-    authRepository: AuthRepository
+    authRepository: AuthRepository,
+    private val placeSearch: PlaceSearch
 ) : ViewModel() {
 
     private data class Filters(
         val collectionIds: Set<String> = emptySet(),
         val shared: Boolean = false,
-        val query: String = ""
+        val query: String = "",
+        val pickedLocation: SelectedLocation? = null
+    )
+
+    private data class LocationSearch(
+        val results: List<SelectedLocation> = emptyList(),
+        val isLoading: Boolean = false,
+        val failed: Boolean = false
     )
 
     private val filters = MutableStateFlow(Filters())
+
+    /**
+     * Searches everywhere once the query is [MIN_LOCATION_QUERY] characters long and typing pauses
+     * for [LOCATION_SEARCH_DELAY_MS]: each search is a network request. A newer query cancels the
+     * previous search (flatMapLatest).
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val locationSearch: Flow<LocationSearch> = filters
+        .map { it.query.trim() }
+        .distinctUntilChanged()
+        .flatMapLatest { query ->
+            if (query.length < MIN_LOCATION_QUERY) {
+                flowOf(LocationSearch())
+            } else {
+                flow {
+                    emit(LocationSearch(isLoading = true))
+                    delay(LOCATION_SEARCH_DELAY_MS)
+                    emit(
+                        resultOf { placeSearch.search(query) }.fold(
+                            onSuccess = { LocationSearch(results = it) },
+                            onFailure = { LocationSearch(failed = true) }
+                        )
+                    )
+                }
+            }
+        }
 
     val uiState: StateFlow<HomeUiState> = combine(
         placeRepository.observeVisiblePlaces(),
         observeCollectionSummaries(),
         authRepository.currentUser,
-        filters
-    ) { places, summaries, user, f ->
+        filters,
+        locationSearch
+    ) { places, summaries, user, f, locations ->
         val collectionsById = summaries.associate { it.collection.id to it.collection }
         // A place in one of my collections is mine; anything else I can see was shared with me.
         val homePlaces = places.map { place ->
@@ -81,7 +133,11 @@ class HomeViewModel(
             sharedSelected = sharedSelected,
             query = f.query,
             places = filtered,
-            searchResults = if (f.query.isBlank()) emptyList() else filtered.filter { it.matches(f.query) }
+            searchResults = if (f.query.isBlank()) emptyList() else filtered.filter { it.matches(f.query) },
+            otherLocations = locations.results,
+            isSearchingLocations = locations.isLoading,
+            locationSearchFailed = locations.failed,
+            pickedLocation = f.pickedLocation
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
@@ -95,6 +151,17 @@ class HomeViewModel(
     }
 
     fun onSharedToggled() = filters.update { it.copy(shared = !it.shared) }
+
+    /** Shows a searched location on the map; picking one ends the search. */
+    fun onLocationPicked(location: SelectedLocation) =
+        filters.update { it.copy(query = "", pickedLocation = location) }
+
+    fun onPickedLocationCleared() = filters.update { it.copy(pickedLocation = null) }
+
+    private companion object {
+        const val MIN_LOCATION_QUERY = 3
+        const val LOCATION_SEARCH_DELAY_MS = 400L
+    }
 }
 
 /** Case-insensitive match on the place's names, address, or collection name. */

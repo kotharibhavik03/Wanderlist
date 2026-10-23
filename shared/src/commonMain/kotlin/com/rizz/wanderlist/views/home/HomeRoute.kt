@@ -22,10 +22,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -44,9 +46,11 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -61,6 +65,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -69,10 +75,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
+import com.rizz.wanderlist.domain.model.SelectedLocation
 import com.rizz.wanderlist.util.formatCoordinates
 import com.rizz.wanderlist.util.pluralize
 import com.rizz.wanderlist.views.place.PlaceMarker
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -88,6 +96,8 @@ fun HomeRoute(
     bottomBarPadding: Dp,
     onAddClick: () -> Unit,
     onPlaceClick: (placeId: String) -> Unit,
+    /** Save a searched location: opens Add Place with it filled in. */
+    onSaveLocation: (SelectedLocation) -> Unit,
     viewModel: HomeViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -96,17 +106,35 @@ fun HomeRoute(
         bottomBarPadding = bottomBarPadding,
         onAddClick = onAddClick,
         onPlaceClick = onPlaceClick,
+        onSaveLocation = onSaveLocation,
         onQueryChange = viewModel::onQueryChange,
         onAllSelected = viewModel::onAllSelected,
         onCollectionToggled = viewModel::onCollectionToggled,
-        onSharedToggled = viewModel::onSharedToggled
+        onSharedToggled = viewModel::onSharedToggled,
+        onLocationPicked = viewModel::onLocationPicked,
+        onPickedLocationCleared = viewModel::onPickedLocationCleared
     )
+}
+
+/** What the bottom sheet is about: one of the user's places, or a location found by search. */
+private sealed interface SheetSubject {
+    /** Identifies the subject, so a new one gets fresh sheet content and is measured before opening. */
+    val key: String
+
+    data class SavedPlace(val item: HomePlace) : SheetSubject {
+        override val key get() = "place:${item.place.id}"
+    }
+
+    data class FoundLocation(val location: SelectedLocation) : SheetSubject {
+        override val key get() = "location:${location.latitude},${location.longitude},${location.actualName}"
+    }
 }
 
 /**
  * The map fills the screen, behind the status bar. The app name, search and filters float on top of it,
- * as in Google Maps; search results open in a panel over the map. Tapping a marker (or a search
- * result) selects the place and opens a non-modal bottom sheet: the map stays usable behind it.
+ * as in Google Maps; search results open in a panel over the map. Tapping a marker or a search
+ * result opens a non-modal bottom sheet for it: the map stays usable behind it. At most one thing
+ * is selected: a saved place or a searched location.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -115,10 +143,13 @@ fun HomeScreen(
     bottomBarPadding: Dp,
     onAddClick: () -> Unit,
     onPlaceClick: (placeId: String) -> Unit,
+    onSaveLocation: (SelectedLocation) -> Unit,
     onQueryChange: (String) -> Unit,
     onAllSelected: () -> Unit,
     onCollectionToggled: (String) -> Unit,
-    onSharedToggled: () -> Unit
+    onSharedToggled: () -> Unit,
+    onLocationPicked: (SelectedLocation) -> Unit,
+    onPickedLocationCleared: () -> Unit
 ) {
     val density = LocalDensity.current
     val focusManager = LocalFocusManager.current
@@ -128,17 +159,37 @@ fun HomeScreen(
     // Height of the floating controls, measured from the top of the screen. The map keeps its
     // framing and Google's logo clear of them, and search results open just below them.
     var controlsHeight by remember { mutableStateOf(0.dp) }
-    // Height of the sheet's summary; the sheet peeks exactly that far (plus its handle and the bar).
-    var summaryHeight by remember { mutableStateOf(0.dp) }
+    // The measured summary height, with the subject it was measured for. The sheet peeks exactly
+    // that far (plus its handle and the bar), and only opens once the current subject is measured.
+    var measuredSummary by remember { mutableStateOf<Pair<String, Dp>?>(null) }
+    val summaryHeight = measuredSummary?.second ?: 0.dp
 
     var selectedPlaceId by rememberSaveable { mutableStateOf<String?>(null) }
     val selected = uiState.places.firstOrNull { it.place.id == selectedPlaceId }
-    // Keeps showing the last place while the sheet slides away, instead of collapsing empty.
-    var sheetPlace by remember { mutableStateOf<HomePlace?>(null) }
-    SideEffect { if (selected != null) sheetPlace = selected }
+    val picked = uiState.pickedLocation
+    val subject: SheetSubject? = when {
+        selected != null -> SheetSubject.SavedPlace(selected)
+        picked != null -> SheetSubject.FoundLocation(picked)
+        else -> null
+    }
+    // The sheet shows the current subject straight away, and keeps showing the last one while it
+    // slides away instead of collapsing empty.
+    var lastSubject by remember { mutableStateOf<SheetSubject?>(null) }
+    SideEffect { if (subject != null) lastSubject = subject }
+    val shownSubject = subject ?: lastSubject
     // A selected place that disappears (filtered out, deleted, unshared) closes the sheet.
     LaunchedEffect(uiState.isLoading, selected == null) {
         if (!uiState.isLoading && selected == null) selectedPlaceId = null
+    }
+
+    fun selectPlace(placeId: String) {
+        onPickedLocationCleared()
+        selectedPlaceId = placeId
+    }
+
+    fun clearSelection() {
+        selectedPlaceId = null
+        onPickedLocationCleared()
     }
 
     // Starts hidden; Hidden must be an allowed state, so swiping down can close the sheet.
@@ -147,41 +198,78 @@ fun HomeScreen(
         setOf(SheetValue.Hidden, SheetValue.PartiallyExpanded, SheetValue.Expanded)
     )
     val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
-    // Selection drives the sheet...
-    LaunchedEffect(selectedPlaceId) {
-        if (selectedPlaceId != null) sheetState.partialExpand() else sheetState.hide()
+    // Selection drives the sheet. It opens only once the new subject's summary is measured: if the
+    // peek height changed mid-animation, the sheet would recompute its resting positions and snap
+    // back to the nearest one, Hidden.
+    val subjectKey = subject?.key
+    LaunchedEffect(subjectKey) {
+        if (subjectKey == null) {
+            sheetState.hide()
+        } else {
+            snapshotFlow { measuredSummary?.first }.first { it == subjectKey }
+            sheetState.partialExpand()
+        }
     }
-    // ...and swiping the sheet away clears the selection. drop(1) skips the initial Hidden, so a
+    // Swiping the sheet away clears the selection. currentValue only changes once the sheet has
+    // settled, so animations in progress don't count. drop(1) skips the initial Hidden, so a
     // selection restored after rotation isn't cleared before the sheet reopens.
     LaunchedEffect(sheetState) {
-        snapshotFlow { sheetState.targetValue }
+        snapshotFlow { sheetState.currentValue }
             .drop(1)
-            .collect { if (it == SheetValue.Hidden) selectedPlaceId = null }
+            .collect { if (it == SheetValue.Hidden) clearSelection() }
     }
 
     // Back closes the sheet first, as in Google Maps, instead of leaving Home.
     NavigationBackHandler(
         state = rememberNavigationEventState(NavigationEventInfo.None),
-        isBackEnabled = selected != null,
-        onBackCompleted = { selectedPlaceId = null }
+        isBackEnabled = subject != null,
+        onBackCompleted = { clearSelection() }
+    )
+
+    // What's below the summary stays invisible until the sheet is pulled up: otherwise its top
+    // shows through the gaps around the floating bottom bar. Alpha only, so the layout (and the
+    // sheet's resting positions) never change.
+    val detailsAlpha by animateFloatAsState(
+        targetValue = if (sheetState.targetValue == SheetValue.Expanded) 1f else 0f,
+        label = "sheet details"
     )
 
     val peekHeight = SheetDragHandleHeight + summaryHeight + bottomBarPadding
-    val mapBottomPadding = if (selected != null) peekHeight else bottomBarPadding + AddButtonClearance
+    val mapBottomPadding = if (subject != null) peekHeight else bottomBarPadding + AddButtonClearance
+    val showError: (String) -> Unit = { message -> scope.launch { snackbarHostState.showSnackbar(message) } }
 
     BottomSheetScaffold(
         scaffoldState = scaffoldState,
         sheetPeekHeight = peekHeight,
         snackbarHost = { SnackbarHost(snackbarHostState, Modifier.padding(bottom = bottomBarPadding)) },
         sheetContent = {
-            sheetPlace?.let { shown ->
-                PlaceSheetContent(
-                    item = shown,
-                    bottomPadding = bottomBarPadding,
-                    onSummaryHeightChanged = { summaryHeight = it },
-                    onOpenDetails = { onPlaceClick(shown.place.id) },
-                    onDirectionsError = { message -> scope.launch { snackbarHostState.showSnackbar(message) } }
-                )
+            val shown = shownSubject
+            // A new key builds the content fresh, so its size is always reported, even when it
+            // happens to match the previous subject's.
+            if (shown != null) key(shown.key) {
+                val onMeasured: (Dp) -> Unit = { height -> measuredSummary = shown.key to height }
+                when (shown) {
+                    is SheetSubject.SavedPlace -> PlaceSheetContent(
+                        item = shown.item,
+                        bottomPadding = bottomBarPadding,
+                        onSummaryHeightChanged = onMeasured,
+                        detailsAlpha = { detailsAlpha },
+                        onOpenDetails = { onPlaceClick(shown.item.place.id) },
+                        onDirectionsError = showError
+                    )
+                    is SheetSubject.FoundLocation -> LocationSheetContent(
+                        location = shown.location,
+                        bottomPadding = bottomBarPadding,
+                        onSummaryHeightChanged = onMeasured,
+                        detailsAlpha = { detailsAlpha },
+                        onSave = {
+                            // Saved, it'll have its own marker; drop the temporary pin.
+                            onPickedLocationCleared()
+                            onSaveLocation(shown.location)
+                        },
+                        onDirectionsError = showError
+                    )
+                }
             }
         },
         containerColor = MaterialTheme.colorScheme.background
@@ -190,10 +278,11 @@ fun HomeScreen(
             PlacesMap(
                 places = uiState.places,
                 selectedPlaceId = selectedPlaceId,
-                onMarkerClick = { id -> selectedPlaceId = id },
+                pin = picked,
+                onMarkerClick = ::selectPlace,
                 onMapClick = {
                     focusManager.clearFocus()
-                    selectedPlaceId = null
+                    clearSelection()
                 },
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(top = controlsHeight, bottom = mapBottomPadding)
@@ -223,15 +312,20 @@ fun HomeScreen(
                     onPlaceClick = { id ->
                         focusManager.clearFocus()
                         onQueryChange("")
-                        selectedPlaceId = id
+                        selectPlace(id)
+                    },
+                    onLocationClick = { location ->
+                        focusManager.clearFocus()
+                        selectedPlaceId = null
+                        onLocationPicked(location)
                     },
                     topOffset = controlsHeight,
                     bottomOffset = bottomBarPadding
                 )
             }
 
-            // The sheet takes the bottom of the screen while a place is selected.
-            if (selected == null) {
+            // The sheet takes the bottom of the screen while something is selected.
+            if (subject == null) {
                 FloatingActionButton(
                     onClick = onAddClick,
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -385,11 +479,15 @@ private fun FilterChips(
     }
 }
 
-/** Results in a rounded panel over the map, starting just below the floating controls. */
+/**
+ * Results in a rounded panel over the map, starting just below the floating controls:
+ * the user's own places first, then locations anywhere from the phone's search.
+ */
 @Composable
 private fun SearchResults(
     uiState: HomeUiState,
     onPlaceClick: (placeId: String) -> Unit,
+    onLocationClick: (SelectedLocation) -> Unit,
     topOffset: Dp,
     bottomOffset: Dp
 ) {
@@ -403,41 +501,116 @@ private fun SearchResults(
             .imePadding()
             .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
     ) {
-        if (uiState.searchResults.isEmpty()) {
+        val nothingFound = uiState.searchResults.isEmpty() &&
+                uiState.otherLocations.isEmpty() &&
+                !uiState.isSearchingLocations &&
+                !uiState.locationSearchFailed
+        if (nothingFound) {
             CenteredMessage(
                 title = "No matches",
-                message = "No places match \"${uiState.query.trim()}\"" +
-                        if (uiState.showingAll) "." else " in the selected filters."
+                message = "Nothing matches \"${uiState.query.trim()}\"."
             )
             return@Surface
         }
         LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
-            items(uiState.searchResults, key = { it.place.id }) { item ->
-                val place = item.place
-                ListItem(
-                    headlineContent = {
-                        Text(place.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    },
-                    supportingContent = {
-                        Text(
-                            place.address ?: formatCoordinates(place.latitude, place.longitude),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    leadingContent = { PlaceMarker(place.markerStyle, item.collection) },
-                    trailingContent = {
-                        Text(
-                            item.collection?.name ?: "Shared",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    modifier = Modifier.clickable { onPlaceClick(place.id) }
-                )
+            if (uiState.searchResults.isNotEmpty()) {
+                item(key = "header-places") { SectionHeader("Your places") }
+                items(uiState.searchResults, key = { "place-${it.place.id}" }) { item ->
+                    val place = item.place
+                    ListItem(
+                        headlineContent = {
+                            Text(place.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        },
+                        supportingContent = {
+                            Text(
+                                place.address ?: formatCoordinates(place.latitude, place.longitude),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        leadingContent = { PlaceMarker(place.markerStyle, item.collection) },
+                        trailingContent = {
+                            Text(
+                                item.collection?.name ?: "Shared",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        modifier = Modifier.clickable { onPlaceClick(place.id) }
+                    )
+                }
+            }
+
+            item(key = "header-locations") { SectionHeader("Other locations") }
+            when {
+                uiState.isSearchingLocations -> item(key = "locations-loading") {
+                    StatusRow { CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp) }
+                }
+                uiState.locationSearchFailed -> item(key = "locations-failed") {
+                    StatusRow(text = "Couldn't search other locations. Check your connection.")
+                }
+                uiState.otherLocations.isEmpty() -> item(key = "locations-empty") {
+                    StatusRow(
+                        text = if (uiState.query.trim().length < 3) "Keep typing to search everywhere."
+                        else "No other locations found."
+                    )
+                }
+                else -> items(
+                    uiState.otherLocations,
+                    key = { "location-${it.latitude},${it.longitude},${it.actualName}" }
+                ) { location ->
+                    ListItem(
+                        headlineContent = {
+                            Text(location.actualName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        },
+                        supportingContent = location.address?.let {
+                            { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        },
+                        leadingContent = {
+                            Icon(
+                                Icons.Default.LocationOn,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        modifier = Modifier.clickable { onLocationClick(location) }
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun SectionHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .semantics { heading() }
+    )
+}
+
+/** A short note in the results, e.g. "Searching…" or why nothing is shown. */
+@Composable
+private fun StatusRow(text: String? = null, leading: (@Composable () -> Unit)? = null) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        leading?.invoke()
+        Text(
+            text ?: "Searching…",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

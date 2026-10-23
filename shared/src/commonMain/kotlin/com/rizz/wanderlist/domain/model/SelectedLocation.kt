@@ -1,9 +1,8 @@
-
 package com.rizz.wanderlist.domain.model
 
 /**
- * A location selected during the add-place flow.
- * This is temporary until the user saves the place.
+ * A point on the map with a name: found by search, or picked in the location picker.
+ * It becomes a place's location once the place is saved.
  */
 data class SelectedLocation(
     val latitude: Double,

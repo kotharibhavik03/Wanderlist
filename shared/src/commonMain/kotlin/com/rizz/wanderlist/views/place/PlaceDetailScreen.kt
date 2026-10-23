@@ -174,7 +174,8 @@ fun PlaceDetailScreen(
             ) {
                 Header(uiState.place, uiState.access, uiState.collection)
                 DirectionsButton(
-                    place = uiState.place,
+                    latitude = uiState.place.latitude,
+                    longitude = uiState.place.longitude,
                     onError = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -289,7 +290,8 @@ private fun Header(place: Place, access: PlaceAccess, collection: PlaceCollectio
 /** One app: open it straight away. Several (iOS): let the user pick. */
 @Composable
 internal fun DirectionsButton(
-    place: Place,
+    latitude: Double,
+    longitude: Double,
     /** Called with a message to show when no app on the device can open the link. */
     onError: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -299,7 +301,7 @@ internal fun DirectionsButton(
 
     fun open(app: DirectionsApp) {
         try {
-            uriHandler.openUri(directionsUrl(app, place.latitude, place.longitude))
+            uriHandler.openUri(directionsUrl(app, latitude, longitude))
         } catch (e: IllegalArgumentException) {
             // Thrown when no app on the device can open the link.
             onError("Couldn't open ${app.label}.")

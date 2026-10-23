@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
+import com.rizz.wanderlist.domain.model.SelectedLocation
 import com.rizz.wanderlist.views.place.PlaceMarker
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
@@ -40,6 +41,7 @@ import eu.buney.maps.LatLngBounds
 import eu.buney.maps.MapProperties
 import eu.buney.maps.MapStyleOptions
 import eu.buney.maps.MapUiSettings
+import eu.buney.maps.Marker
 import eu.buney.maps.MarkerComposable
 import eu.buney.maps.rememberCameraPositionState
 import eu.buney.maps.rememberUpdatedMarkerState
@@ -61,6 +63,8 @@ private const val SelectedPlaceMinZoom = 12f
 internal fun PlacesMap(
     places: List<HomePlace>,
     selectedPlaceId: String?,
+    /** A searched location to show with a temporary pin, or null. */
+    pin: SelectedLocation?,
     onMarkerClick: (placeId: String) -> Unit,
     /** A tap on the map itself, not on a marker. */
     onMapClick: () -> Unit,
@@ -90,6 +94,13 @@ internal fun PlacesMap(
         cameraState.animateOrJump(
             CameraUpdateFactory.newLatLngZoom(LatLng(selected.place.latitude, selected.place.longitude), zoom)
         )
+    }
+
+    // Fly to a searched location.
+    LaunchedEffect(mapLoaded, pin) {
+        if (!mapLoaded || pin == null) return@LaunchedEffect
+        val zoom = maxOf(cameraState.position.zoom, SelectedPlaceMinZoom)
+        cameraState.animateOrJump(CameraUpdateFactory.newLatLngZoom(LatLng(pin.latitude, pin.longitude), zoom))
     }
 
     Box(modifier = modifier) {
@@ -128,9 +139,21 @@ internal fun PlacesMap(
                     }
                 }
             }
+
+            // A searched location: Google's standard red pin, so it reads as "not saved yet".
+            pin?.let { location ->
+                key(location) {
+                    Marker(
+                        state = rememberUpdatedMarkerState(LatLng(location.latitude, location.longitude)),
+                        title = location.actualName,
+                        zIndex = 2f,
+                        onClick = { true } // its sheet is already open
+                    )
+                }
+            }
         }
 
-        if (places.isEmpty()) {
+        if (places.isEmpty() && pin == null) {
             EmptyMapHint(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)

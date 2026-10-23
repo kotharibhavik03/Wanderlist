@@ -40,7 +40,7 @@ val appModule = module {
     single<ProfileRepository> { FirestoreProfileRepository(get()) }
     viewModel { AuthViewModel(get(), get()) }
     viewModel { ProfileViewModel(get()) }
-    viewModel { HomeViewModel(get(), get(), get()) }
+    viewModel { HomeViewModel(get(), get(), get(), get()) }
     viewModel { SignInViewModel() }
 
     viewModel { AddPlaceViewModel(get(), get(), get(), get(), get()) }
