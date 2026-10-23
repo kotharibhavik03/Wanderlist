@@ -1,7 +1,6 @@
 package com.rizz.wanderlist.views.profile
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -74,7 +73,6 @@ fun ProfileScreen(uiState: ProfileUiState, onSignOut: () -> Unit) {
                 Text(
                     uiState.user.displayName ?: "Wanderlist traveller",
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
                 uiState.user.email?.let { email ->

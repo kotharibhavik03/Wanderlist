@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -44,31 +43,30 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rizz.wanderlist.domain.model.Place
 import com.rizz.wanderlist.domain.model.PlaceCollection
-import com.rizz.wanderlist.domain.model.PlaceStatus
 import com.rizz.wanderlist.util.formatCoordinates
 import com.rizz.wanderlist.util.formatDate
 import com.rizz.wanderlist.util.pluralize
 import com.rizz.wanderlist.views.place.MarkerBadge
 import com.rizz.wanderlist.views.place.PlaceMarker
+import com.rizz.wanderlist.views.place.PlaceStatusBadge
 import com.rizz.wanderlist.views.place.collectionBrush
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -249,7 +247,7 @@ private fun Header(collection: PlaceCollection, placeCount: Int, photoCount: Int
             size = 56.dp
         )
         Column {
-            Text(collection.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(collection.name, style = MaterialTheme.typography.titleLarge)
             Text(
                 "${pluralize(placeCount, "place")} · ${pluralize(photoCount, "photo")}",
                 style = MaterialTheme.typography.bodyMedium,
@@ -283,7 +281,6 @@ private fun PlacesTab(
 @Composable
 private fun PlaceCard(place: Place, collection: PlaceCollection, onClick: () -> Unit) {
     val meta = buildList {
-        add(if (place.status == PlaceStatus.VISITED) "Visited" else "Want to visit")
         place.visitedOnEpochMillis?.let { add(formatDate(it)) }
         place.rating?.let { add("★ $it") }
         if (place.photos.isNotEmpty()) add(pluralize(place.photos.size, "photo"))
@@ -311,7 +308,22 @@ private fun PlaceCard(place: Place, collection: PlaceCollection, onClick: () -> 
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(meta, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Row(
+                    modifier = Modifier.padding(top = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    PlaceStatusBadge(place.status)
+                    if (meta.isNotEmpty()) {
+                        Text(
+                            meta,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
     }
@@ -335,7 +347,7 @@ private fun PhotosTab(photos: List<CollectionPhoto>) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .size(110.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(MaterialTheme.shapes.small)
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .semantics { contentDescription = "Photo from ${item.placeName}" },
                 contentAlignment = Alignment.Center

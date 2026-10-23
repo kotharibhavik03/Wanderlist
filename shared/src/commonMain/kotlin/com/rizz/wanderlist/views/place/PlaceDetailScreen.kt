@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -46,19 +45,18 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -68,7 +66,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -77,7 +74,6 @@ import com.rizz.wanderlist.domain.model.PlaceAccess
 import com.rizz.wanderlist.domain.model.PlaceCollection
 import com.rizz.wanderlist.domain.model.PlaceMember
 import com.rizz.wanderlist.domain.model.PlacePhoto
-import com.rizz.wanderlist.domain.model.PlaceStatus
 import com.rizz.wanderlist.util.DirectionsApp
 import com.rizz.wanderlist.util.directionsApps
 import com.rizz.wanderlist.util.directionsUrl
@@ -265,7 +261,7 @@ private fun Header(place: Place, access: PlaceAccess, collection: PlaceCollectio
     ) {
         PlaceMarker(place.markerStyle, collection, size = 64.dp)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(place.displayName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(place.displayName, style = MaterialTheme.typography.titleLarge)
             // When the user renamed it, still show what the map calls it.
             if (place.customName.isNotBlank() && place.customName != place.actualName) {
                 Text(
@@ -275,29 +271,14 @@ private fun Header(place: Place, access: PlaceAccess, collection: PlaceCollectio
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Pill(if (place.status == PlaceStatus.VISITED) "Visited" else "Want to visit")
+                PlaceStatusBadge(place.status)
                 when (access) {
                     PlaceAccess.OWNER -> Unit
-                    PlaceAccess.COLLABORATOR -> Pill("Shared · Collaborator")
-                    PlaceAccess.VISITED_WITH -> Pill("Shared · Visited with")
+                    PlaceAccess.COLLABORATOR -> Badge("Shared · Collaborator")
+                    PlaceAccess.VISITED_WITH -> Badge("Shared · Visited with")
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun Pill(text: String) {
-    Surface(
-        shape = RoundedCornerShape(50),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-    ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-        )
     }
 }
 
@@ -440,7 +421,7 @@ private fun PhotosSection(photos: List<PlacePhoto>) {
                     Box(
                         modifier = Modifier
                             .size(110.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(MaterialTheme.shapes.small)
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                             .semantics { contentDescription = if (photo.isPrivate) "Private photo" else "Photo" },
                         contentAlignment = Alignment.Center
