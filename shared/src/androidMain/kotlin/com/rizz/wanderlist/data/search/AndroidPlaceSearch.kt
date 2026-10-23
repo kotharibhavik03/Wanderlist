@@ -16,13 +16,36 @@ import kotlinx.coroutines.withContext
 /** Android's built-in Geocoder: free, no API key. Finds towns, landmarks and addresses; no autocomplete. */
 class AndroidPlaceSearch(private val context: Context) : PlaceSearch {
 
-    override suspend fun search(query: String): List<SelectedLocation> {
+    override suspend fun search(query: String): List<SelectedLocation> =
+        geocode(
+            asynchronous = { geocoder, listener -> geocoder.getFromLocationName(query, MAX_RESULTS, listener) },
+            blocking = { geocoder ->
+                @Suppress("DEPRECATION")
+                geocoder.getFromLocationName(query, MAX_RESULTS)
+            }
+        ).map { it.toLocation() }
+
+    override suspend fun reverseGeocode(latitude: Double, longitude: Double): SelectedLocation? =
+        geocode(
+            asynchronous = { geocoder, listener -> geocoder.getFromLocation(latitude, longitude, 1, listener) },
+            blocking = { geocoder ->
+                @Suppress("DEPRECATION")
+                geocoder.getFromLocation(latitude, longitude, 1)
+            }
+        ).firstOrNull()
+            // Keep the pin's exact point; the address's own coordinates can be the building's centre.
+            ?.toLocation()?.copy(latitude = latitude, longitude = longitude)
+
+    /** Runs a Geocoder request: the asynchronous API on Android 13+, the blocking one off the main thread below. */
+    private suspend fun geocode(
+        asynchronous: (Geocoder, Geocoder.GeocodeListener) -> Unit,
+        blocking: (Geocoder) -> List<Address>?
+    ): List<Address> {
         if (!Geocoder.isPresent()) throw IOException("Location search isn't available on this device.")
         val geocoder = Geocoder(context)
-        val addresses = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Android 13+: asynchronous API.
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             suspendCancellableCoroutine { continuation ->
-                geocoder.getFromLocationName(query, MAX_RESULTS, object : Geocoder.GeocodeListener {
+                asynchronous(geocoder, object : Geocoder.GeocodeListener {
                     override fun onGeocode(addresses: MutableList<Address>) {
                         continuation.resume(addresses)
                     }
@@ -33,20 +56,19 @@ class AndroidPlaceSearch(private val context: Context) : PlaceSearch {
                 })
             }
         } else {
-            // Older Android: the blocking call does network I/O, so keep it off the main thread.
-            withContext(Dispatchers.IO) {
-                @Suppress("DEPRECATION")
-                geocoder.getFromLocationName(query, MAX_RESULTS).orEmpty()
-            }
+            // The blocking call does network I/O, so keep it off the main thread.
+            withContext(Dispatchers.IO) { blocking(geocoder).orEmpty() }
         }
-        return addresses.map { it.toLocation() }
     }
 
     private fun Address.toLocation(): SelectedLocation {
         val fullAddress = getAddressLine(0)
         // featureName is the place itself ("Spiti Valley"), but for a street address it's often
-        // just the house number, so only use it when it reads as a name.
+        // just the house number, so only use it when it reads as a name; then the street, the
+        // neighbourhood, the town.
         val name = featureName?.takeIf { name -> name.any { it.isLetter() } }
+            ?: thoroughfare
+            ?: subLocality
             ?: locality
             ?: fullAddress
             ?: "Selected location"

@@ -8,16 +8,10 @@ import com.rizz.wanderlist.domain.model.PlaceCollection
 import com.rizz.wanderlist.domain.model.SelectedLocation
 import com.rizz.wanderlist.domain.repository.AuthRepository
 import com.rizz.wanderlist.domain.repository.PlaceRepository
-import com.rizz.wanderlist.domain.repository.PlaceSearch
+import com.rizz.wanderlist.domain.usecase.LocationSearchState
 import com.rizz.wanderlist.domain.usecase.ObserveCollectionSummariesUseCase
-import com.rizz.wanderlist.util.resultOf
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
+import com.rizz.wanderlist.domain.usecase.SearchLocationsUseCase
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -58,7 +52,7 @@ class HomeViewModel(
     placeRepository: PlaceRepository,
     observeCollectionSummaries: ObserveCollectionSummariesUseCase,
     authRepository: AuthRepository,
-    private val placeSearch: PlaceSearch
+    searchLocations: SearchLocationsUseCase
 ) : ViewModel() {
 
     private data class Filters(
@@ -68,39 +62,10 @@ class HomeViewModel(
         val pickedLocation: SelectedLocation? = null
     )
 
-    private data class LocationSearch(
-        val results: List<SelectedLocation> = emptyList(),
-        val isLoading: Boolean = false,
-        val failed: Boolean = false
-    )
-
     private val filters = MutableStateFlow(Filters())
 
-    /**
-     * Searches everywhere once the query is [MIN_LOCATION_QUERY] characters long and typing pauses
-     * for [LOCATION_SEARCH_DELAY_MS]: each search is a network request. A newer query cancels the
-     * previous search (flatMapLatest).
-     */
-    @OptIn(ExperimentalCoroutinesApi::class)
-    private val locationSearch: Flow<LocationSearch> = filters
-        .map { it.query.trim() }
-        .distinctUntilChanged()
-        .flatMapLatest { query ->
-            if (query.length < MIN_LOCATION_QUERY) {
-                flowOf(LocationSearch())
-            } else {
-                flow {
-                    emit(LocationSearch(isLoading = true))
-                    delay(LOCATION_SEARCH_DELAY_MS)
-                    emit(
-                        resultOf { placeSearch.search(query) }.fold(
-                            onSuccess = { LocationSearch(results = it) },
-                            onFailure = { LocationSearch(failed = true) }
-                        )
-                    )
-                }
-            }
-        }
+    /** Searches everywhere as the user types (see SearchLocationsUseCase for pacing). */
+    private val locationSearch: Flow<LocationSearchState> = searchLocations(filters.map { it.query })
 
     val uiState: StateFlow<HomeUiState> = combine(
         placeRepository.observeVisiblePlaces(),
@@ -158,10 +123,6 @@ class HomeViewModel(
 
     fun onPickedLocationCleared() = filters.update { it.copy(pickedLocation = null) }
 
-    private companion object {
-        const val MIN_LOCATION_QUERY = 3
-        const val LOCATION_SEARCH_DELAY_MS = 400L
-    }
 }
 
 /** Case-insensitive match on the place's names, address, or collection name. */

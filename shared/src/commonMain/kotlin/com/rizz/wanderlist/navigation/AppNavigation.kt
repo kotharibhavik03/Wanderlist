@@ -23,6 +23,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -39,7 +40,7 @@ import com.rizz.wanderlist.views.collection.CreateCollectionRoute
 import com.rizz.wanderlist.views.home.HomeRoute
 import com.rizz.wanderlist.views.place.AddPlaceRoute
 import com.rizz.wanderlist.views.place.AddPlaceViewModel
-import com.rizz.wanderlist.views.place.MapPickerRoute
+import com.rizz.wanderlist.views.mapPicker.MapPickerRoute
 import com.rizz.wanderlist.views.place.PlaceDetailRoute
 import com.rizz.wanderlist.views.profile.ProfileRoute
 import kotlinx.serialization.modules.SerializersModule
@@ -246,8 +247,14 @@ fun AppNavigation(onSignOut: () -> Unit) {
                 }
 
                 entry<Route.MapPicker> {
+                    // Starts from the draft's location: the place being edited, or one saved from search.
+                    val initial = remember { addPlaceViewModel.uiState.value.selectedLocation }
                     MapPickerRoute(
-                        viewModel = addPlaceViewModel,
+                        initial = initial,
+                        onConfirm = { location ->
+                            addPlaceViewModel.onLocationSelected(location)
+                            backStack.removeLastOrNull()
+                        },
                         onBack = { backStack.removeLastOrNull() }
                     )
                 }

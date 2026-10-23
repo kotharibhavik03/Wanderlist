@@ -24,30 +24,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import com.rizz.wanderlist.domain.model.SelectedLocation
+import com.rizz.wanderlist.views.map.AppMapUiSettings
+import com.rizz.wanderlist.views.map.WorldView
+import com.rizz.wanderlist.views.map.animateOrJump
+import com.rizz.wanderlist.views.map.rememberMapProperties
 import com.rizz.wanderlist.views.place.PlaceMarker
-import kotlin.coroutines.cancellation.CancellationException
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
-import com.rizz.wanderlist.views.theme.DarkMapStyleJson
-import com.rizz.wanderlist.views.theme.isDark
-import eu.buney.maps.CameraMoveStartedReason
-import eu.buney.maps.CameraPosition
-import eu.buney.maps.CameraPositionState
 import eu.buney.maps.CameraUpdate
 import eu.buney.maps.CameraUpdateFactory
 import eu.buney.maps.GoogleMap
 import eu.buney.maps.LatLng
 import eu.buney.maps.LatLngBounds
-import eu.buney.maps.MapProperties
-import eu.buney.maps.MapStyleOptions
-import eu.buney.maps.MapUiSettings
 import eu.buney.maps.Marker
 import eu.buney.maps.MarkerComposable
 import eu.buney.maps.rememberCameraPositionState
 import eu.buney.maps.rememberUpdatedMarkerState
-
-/** Zoomed out far enough to show most of the world when there's nothing to frame yet. */
-private val WorldView = CameraPosition(LatLng(20.0, 0.0), 1.5f, 0f, 0f)
 
 /** Zoom used when every place is at the same point, where bounds would zoom in all the way. */
 private const val SinglePlaceZoom = 12f
@@ -74,10 +64,7 @@ internal fun PlacesMap(
 ) {
     val cameraState = rememberCameraPositionState { position = WorldView }
     var mapLoaded by remember { mutableStateOf(false) }
-    val isDark = MaterialTheme.isDark
-    val properties = remember(isDark) {
-        MapProperties(mapStyleOptions = if (isDark) MapStyleOptions.fromJson(DarkMapStyleJson) else null)
-    }
+    val properties = rememberMapProperties()
 
     // Frame the visible places whenever the set changes (first load, a filter chip, a new place).
     // Only after the map has loaded: framing bounds on a map with no size crashes on Android.
@@ -110,11 +97,7 @@ internal fun PlacesMap(
             properties = properties,
             contentPadding = contentPadding,
             onMapClick = { onMapClick() },
-            uiSettings = MapUiSettings(
-                mapToolbarEnabled = false,
-                zoomControlsEnabled = false,
-                myLocationButtonEnabled = false
-            ),
+            uiSettings = AppMapUiSettings,
             onMapLoaded = { mapLoaded = true }
         ) {
             places.forEach { item ->
@@ -200,21 +183,6 @@ private fun EmptyMapHint(modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-    }
-}
-
-/**
- * Animates to [update]. If something other than the user's finger interrupts the animation (for
- * example the keyboard closing as a search result is picked), jumps there instead, so the camera
- * never stops halfway. A user dragging the map is left alone.
- */
-private suspend fun CameraPositionState.animateOrJump(update: CameraUpdate) {
-    try {
-        animate(update)
-    } catch (e: CancellationException) {
-        // Our own coroutine was cancelled (e.g. a newer selection): stop here.
-        currentCoroutineContext().ensureActive()
-        if (cameraMoveStartedReason != CameraMoveStartedReason.GESTURE) move(update)
     }
 }
 
