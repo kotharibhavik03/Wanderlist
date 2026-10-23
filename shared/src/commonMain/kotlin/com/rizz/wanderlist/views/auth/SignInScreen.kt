@@ -1,4 +1,5 @@
 package com.rizz.wanderlist.views.auth
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.CircularProgressIndicator
@@ -11,11 +12,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mmk.kmpauth.google.rememberGoogleAuthState
 import com.mmk.kmpauth.uihelper.google.GoogleSignInButton
+import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
+import wanderlist.shared.generated.resources.Res
+import wanderlist.shared.generated.resources.app_logo
 
 @Composable
 fun SignInRoute(viewModel: SignInViewModel = koinViewModel()) {
@@ -47,7 +50,12 @@ fun SignInScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text("🧭", fontSize = 64.sp)
+            // The app's logo (the same compass as the launcher icon). Decorative: the name follows.
+            Image(
+                painter = painterResource(Res.drawable.app_logo),
+                contentDescription = null,
+                modifier = Modifier.size(112.dp)
+            )
             Spacer(Modifier.height(16.dp))
             Text("Wanderlist", style = MaterialTheme.typography.headlineLarge)
             Spacer(Modifier.height(8.dp))
@@ -62,8 +70,7 @@ fun SignInScreen(
                 CircularProgressIndicator()
             } else {
                 GoogleSignInButton(
-                    // A minimum, not a fixed height: a large font makes the label taller.
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp, max = 60.dp)
                 ) {
                     onGoogleClick()
                 }

@@ -222,3 +222,8 @@ for (density, size) in [("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 14
 let appIcon = "iosApp/iosApp/Assets.xcassets/AppIcon.appiconset"
 render(size: 1024, backdrop: .fill, caseRatio: 0.30, to: "\(appIcon)/app-icon-1024.png")
 render(size: 1024, backdrop: .none, caseRatio: 0.30, to: "\(appIcon)/app-icon-1024-dark.png")
+
+// The logo inside the app (sign-in screen): the compass on a transparent background, filling its
+// frame (1.35 × 0.37 = 0.5 of the size from the dial's centre), so it suits light and dark themes.
+// 384 px covers the largest size it's drawn at (112dp at 3x).
+render(size: 384, backdrop: .none, caseRatio: 0.37, to: "shared/src/commonMain/composeResources/drawable/app_logo.png")

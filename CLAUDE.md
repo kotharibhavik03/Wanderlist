@@ -120,7 +120,7 @@ Kotlin Multiplatform + Compose Multiplatform travel app (Android + iOS from one 
 - "Shared with me": segmented control (My collections | Shared with me) on the Collections tab; FAB only on My collections. `PlaceRepository.observeSharedWithMe()` returns `SharedPlace(place, myRole)` for places someone else owns where my lowercase email is a member. `InMemoryPlaceRepository` now takes `AuthRepository` and stamps the real signed-in user as `ownerId` / photo `uploaderId`.
 
 ### Compiles on both targets, runtime NOT yet confirmed
-- Nothing at the moment.
+- Google logo taps blocked (Home map and location picker). `GoogleLogoTapBlocker(contentPadding)` in `views/map/MapDefaults.kt`, drawn over the map with the map's own `contentPadding`: an 88×40dp `pointerInput` box in the bottom-start corner, where the SDK keeps its logo. The logo stays visible (Maps terms forbid hiding it); taps on it no longer open Google Maps. A pan that starts on the logo doesn't move the map. Android: logo measured on the emulator at about 58×21dp, 5dp from the edge; taps there kept the app in front. iOS not yet checked.
 
 ### Pending, in order
 All product requirements are built. Offline-queued saves, CI/README/GitHub packaging, Crashlytics and a review of empty/loading/error states are not wanted. What remains:

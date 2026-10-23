@@ -7,12 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		9A3E0C1F2B7D4E5F6A7B8C01 /* GoogleMaps in Frameworks */ = {isa = PBXBuildFile; productRef = 9A3E0C1F2B7D4E5F6A7B8C02 /* GoogleMaps */; };
 		430549CE3089EDA300287B58 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 430549CD3089EDA300287B58 /* GoogleService-Info.plist */; };
 		435A649B308A7CD500D7890E /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 435A649A308A7CD500D7890E /* GoogleSignIn */; };
 		435A649D308A7CD500D7890E /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 435A649C308A7CD500D7890E /* GoogleSignInSwift */; };
 		435A64A0308A7D2B00D7890E /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 435A649F308A7D2B00D7890E /* FirebaseAuth */; };
 		435A64A2308A7D2B00D7890E /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 435A64A1308A7D2B00D7890E /* FirebaseCore */; };
+		9A3E0C1F2B7D4E5F6A7B8C01 /* GoogleMaps in Frameworks */ = {isa = PBXBuildFile; productRef = 9A3E0C1F2B7D4E5F6A7B8C02 /* GoogleMaps */; };
 		CB6C5CE31CA2603C586CDA82 /* KotlinMultiplatformLinkedPackage in Frameworks */ = {isa = PBXBuildFile; productRef = AB09DCCEDD178DC87B28399C /* KotlinMultiplatformLinkedPackage */; };
 /* End PBXBuildFile section */
 
@@ -22,7 +22,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		02894BD8904584932911EB34 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		02894BD8904584932911EB34 /* Exceptions for "iosApp" folder in "iosApp" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -34,21 +34,13 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4EF7E780A6884AED374D26AB /* Configuration */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
 			path = Configuration;
 			sourceTree = "<group>";
 		};
 		F571B1003D50CEC53792DCC0 /* iosApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				02894BD8904584932911EB34 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
-			);
-			explicitFileTypes = {
-			};
-			explicitFolders = (
+				02894BD8904584932911EB34 /* Exceptions for "iosApp" folder in "iosApp" target */,
 			);
 			path = iosApp;
 			sourceTree = "<group>";
@@ -339,7 +331,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_ASSET_PATHS = "\"iosApp/Preview Content\"";
-				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				DEVELOPMENT_TEAM = 7663S8AUCW;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = iosApp/Info.plist;
@@ -352,6 +344,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -372,7 +365,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_ASSET_PATHS = "\"iosApp/Preview Content\"";
-				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				DEVELOPMENT_TEAM = 7663S8AUCW;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = iosApp/Info.plist;
@@ -385,6 +378,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -473,14 +467,14 @@
 			package = 435A649E308A7D2B00D7890E /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseCore;
 		};
-		AB09DCCEDD178DC87B28399C /* KotlinMultiplatformLinkedPackage */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = KotlinMultiplatformLinkedPackage;
-		};
 		9A3E0C1F2B7D4E5F6A7B8C02 /* GoogleMaps */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 9A3E0C1F2B7D4E5F6A7B8C03 /* XCRemoteSwiftPackageReference "ios-maps-sdk" */;
 			productName = GoogleMaps;
+		};
+		AB09DCCEDD178DC87B28399C /* KotlinMultiplatformLinkedPackage */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = KotlinMultiplatformLinkedPackage;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

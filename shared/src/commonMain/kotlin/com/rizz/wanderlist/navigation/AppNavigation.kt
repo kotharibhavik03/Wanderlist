@@ -49,8 +49,8 @@ import org.koin.compose.viewmodel.koinViewModel
 
 /** The floating bottom bar's corner radius and its gaps to the screen edges. */
 private val BottomBarCornerRadius = 24.dp
-private val BottomBarHorizontalMargin = 12.dp
-private val BottomBarVerticalMargin = 8.dp
+private val BottomBarHorizontalMargin = 24.dp
+private val BottomBarVerticalMargin = 2.dp
 
 private val navConfig = SavedStateConfiguration {
     serializersModule = SerializersModule {
