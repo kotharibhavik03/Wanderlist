@@ -44,8 +44,8 @@ interface PlaceRepository {
     fun observeSharedWithMe(): Flow<List<SharedPlace>>
 
     /**
-     * Saves a place owned by the signed-in user, with its photos. All or nothing: if any
-     * photo fails to upload, nothing is saved and the files already uploaded are removed.
+     * Saves a place owned by the signed-in user, with any number of photos. All or nothing: if
+     * any photo fails to upload or save, nothing is kept and the files already uploaded are removed.
      * [onPhotoUploaded] reports how many photos are up so far. Throws if nobody is signed in.
      */
     suspend fun createPlace(newPlace: NewPlace, onPhotoUploaded: (uploaded: Int) -> Unit = {}): Place
@@ -70,9 +70,9 @@ interface PlaceRepository {
     suspend fun deletePlace(placeId: String)
 
     /**
-     * Adds the signed-in user's photos to a place they own or are on (at most
-     * [com.rizz.wanderlist.domain.model.MAX_PHOTOS_PER_SAVE]). All or nothing, like
-     * [createPlace]. Photos already on the place are skipped, so a failed save can be retried.
+     * Adds any number of the signed-in user's photos to a place they own or are on. They're
+     * saved a few at a time; if one fails, the photos saved before it stay on the place and the
+     * rest are not added. Photos already on the place are skipped, so a failed save can be retried.
      * Throws when not allowed.
      */
     suspend fun addPhotos(placeId: String, photos: List<NewPlacePhoto>, onPhotoUploaded: (uploaded: Int) -> Unit = {})

@@ -19,11 +19,7 @@ fun AddPlaceRoute(
     val collections by viewModel.collections.collectAsStateWithLifecycle()
     val myEmail by viewModel.myEmail.collectAsStateWithLifecycle()
     val currentOnSaved by rememberUpdatedState(onSaved)
-    // Asks for at most what's left of the limit (a picker can't take back extra choices).
-    val photoPicker = rememberPhotoPicker(
-        maxItems = uiState.photoRoom.coerceAtLeast(1),
-        onPicked = viewModel::onPhotosPicked
-    )
+    val photoPicker = rememberPhotoPicker(onPicked = viewModel::onPhotosPicked)
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->

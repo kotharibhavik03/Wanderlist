@@ -188,7 +188,7 @@ internal fun PlacesMap(
 @Composable
 private fun MapBadge(item: HomePlace, isSelected: Boolean, photo: Painter?) {
     val ringColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
-    val badgeSize = if (isSelected) SelectedBadgeSize else 40.dp
+    val badgeSize = if (isSelected) SelectedBadgeSize else BadgeSize
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
@@ -200,7 +200,11 @@ private fun MapBadge(item: HomePlace, isSelected: Boolean, photo: Painter?) {
             // No URL here, only the loaded photo: until it arrives the marker shows the collection badge.
             PlaceMarker(item.place.markerStyle, item.collection, photoUrl = null, size = badgeSize, loadedPhoto = photo)
         }
-        MarkerTail(ringColor, height = if (isSelected) 10.dp else 8.dp)
+        MarkerTail(
+            ringColor,
+            width = if (isSelected) SelectedTailWidth else TailWidth,
+            height = if (isSelected) 10.dp else 7.dp
+        )
     }
 }
 
@@ -209,8 +213,8 @@ private fun MapBadge(item: HomePlace, isSelected: Boolean, photo: Painter?) {
  * inside the ring, so ring and tail read as one shape with no seam where the circle curves away.
  */
 @Composable
-private fun MarkerTail(color: Color, height: Dp) {
-    Canvas(modifier = Modifier.size(width = TailWidth, height = height)) {
+private fun MarkerTail(color: Color, width: Dp, height: Dp) {
+    Canvas(modifier = Modifier.size(width = width, height = height)) {
         val overlap = TailOverlap.toPx()
         val tail = Path().apply {
             moveTo(0f, -overlap)
@@ -225,8 +229,9 @@ private fun MarkerTail(color: Color, height: Dp) {
 /** The ring around a marker badge. */
 private val RingWidth = 3.dp
 
-/** The tail's width where it meets the ring. */
-private val TailWidth = 14.dp
+/** The tail's width where it meets the ring, on a marker that isn't selected and on the selected one. */
+private val TailWidth = 12.dp
+private val SelectedTailWidth = 14.dp
 
 /**
  * How far the tail reaches up into the ring. Less than [RingWidth], so it never covers the badge;
@@ -247,6 +252,12 @@ private fun cameraUpdateFor(places: List<HomePlace>): CameraUpdate {
         CameraUpdateFactory.newLatLngBounds(LatLngBounds(LatLng(south, west), LatLng(north, east)), BoundsPaddingPx)
     }
 }
+
+/**
+ * A marker's size inside its ring. Small enough that nearby places don't hide each other or the
+ * map; the selected one grows to stand out.
+ */
+private val BadgeSize = 32.dp
 
 /** The selected marker's size, the largest a marker gets; photos are loaded at this size. */
 private val SelectedBadgeSize = 52.dp

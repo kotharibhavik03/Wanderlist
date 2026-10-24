@@ -30,7 +30,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.rizz.wanderlist.domain.model.MAX_PHOTOS_PER_SAVE
 import com.rizz.wanderlist.util.pluralize
 import com.rizz.wanderlist.views.photo.DraftPhotoThumbnail
 
@@ -65,7 +64,7 @@ internal fun AddPhotosSheet(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Add photos", style = MaterialTheme.typography.titleLarge)
                 Text(
-                    "Up to $MAX_PHOTOS_PER_SAVE at a time. Lock a photo to keep it visible only to you.",
+                    "Lock a photo to keep it visible only to you.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -83,7 +82,7 @@ internal fun AddPhotosSheet(
                         enabled = !draft.isUploading
                     )
                 }
-                if (draft.room > 0 && !draft.isUploading) {
+                if (!draft.isUploading) {
                     OutlinedCard(onClick = onPickMore, modifier = Modifier.size(88.dp)) {
                         Column(
                             modifier = Modifier.fillMaxSize(),

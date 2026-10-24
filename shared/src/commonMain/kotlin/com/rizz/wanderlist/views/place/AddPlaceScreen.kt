@@ -74,7 +74,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.rizz.wanderlist.domain.model.CollectionSummary
-import com.rizz.wanderlist.domain.model.MAX_PHOTOS_PER_SAVE
 import com.rizz.wanderlist.domain.model.MarkerStyle
 import com.rizz.wanderlist.domain.model.MemberRole
 import com.rizz.wanderlist.domain.model.PlaceCollection
@@ -175,7 +174,7 @@ fun AddPlaceScreen(
                 PhotosSection(
                     photos = uiState.photos,
                     isEditing = uiState.isEditing,
-                    canAdd = uiState.photoRoom > 0 && !uiState.isSaving,
+                    canAdd = !uiState.isSaving,
                     onAdd = actions.onAddPhotos,
                     onRemove = actions.onPhotoRemoved,
                     onTogglePrivate = actions.onPhotoPrivacyToggled
@@ -367,10 +366,9 @@ private fun PhotosSection(
     Section(
         "Photos",
         if (isEditing) {
-            "Add up to $MAX_PHOTOS_PER_SAVE at a time. Lock your photos to keep them visible only to you. " +
-                    "Changes apply when you save."
+            "Lock your photos to keep them visible only to you. Changes apply when you save."
         } else {
-            "Optional, up to $MAX_PHOTOS_PER_SAVE. Lock a photo to keep it visible only to you."
+            "Optional. Lock a photo to keep it visible only to you."
         }
     ) {
         Row(

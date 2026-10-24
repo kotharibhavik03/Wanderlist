@@ -2,7 +2,6 @@ package com.rizz.wanderlist.views.place
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.rizz.wanderlist.domain.model.MAX_PHOTOS_PER_SAVE
 import com.rizz.wanderlist.domain.model.MemberRole
 import com.rizz.wanderlist.domain.model.NewPlacePhoto
 import com.rizz.wanderlist.domain.model.Place
@@ -61,8 +60,6 @@ data class PhotoDraft(
     val isUploading: Boolean get() = upload != null
     val isPreparing: Boolean get() = photos.any { !it.isReady }
 
-    /** How many more photos this upload can take. */
-    val room: Int get() = (MAX_PHOTOS_PER_SAVE - photos.size).coerceAtLeast(0)
     val canUpload: Boolean get() = photos.isNotEmpty() && !isPreparing && !isUploading
 }
 
@@ -189,7 +186,7 @@ class PlaceDetailViewModel(
         val draft = actionState.value.photoDraft ?: PhotoDraft()
         if (draft.isUploading) return
         actionState.update { it.copy(photoDraft = draft) }
-        val pending = draftPhotos.accept(sources, draft.room)
+        val pending = draftPhotos.accept(sources)
         if (pending.isNotEmpty()) launchDraftWork { draftPhotos.compress(pending) }
     }
 

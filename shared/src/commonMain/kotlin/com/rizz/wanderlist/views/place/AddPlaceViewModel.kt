@@ -3,7 +3,6 @@ package com.rizz.wanderlist.views.place
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rizz.wanderlist.domain.model.CollectionSummary
-import com.rizz.wanderlist.domain.model.MAX_PHOTOS_PER_SAVE
 import com.rizz.wanderlist.domain.model.MarkerStyle
 import com.rizz.wanderlist.domain.model.MemberRole
 import com.rizz.wanderlist.domain.model.NewPlace
@@ -89,9 +88,6 @@ data class AddPlaceUiState(
         get() = mode == DraftMode.New || (mode is DraftMode.Editing && mode.access == PlaceAccess.OWNER)
 
     val isPreparingPhotos: Boolean get() = photos.any { !it.isReady }
-
-    /** How many more new photos this save can take (photos already on the place don't count). */
-    val photoRoom: Int get() = (MAX_PHOTOS_PER_SAVE - photos.count { !it.isSaved }).coerceAtLeast(0)
 
     /** What saving this edit does to the place's photos. */
     val photoChanges: PhotoChanges
@@ -237,7 +233,7 @@ class AddPlaceViewModel(
 
     /** Adds what the photo picker returned; each photo is compressed in the background. */
     fun onPhotosPicked(sources: List<String>) {
-        val pending = draftPhotos.accept(sources, _uiState.value.photoRoom)
+        val pending = draftPhotos.accept(sources)
         if (pending.isNotEmpty()) launchDraftWork { draftPhotos.compress(pending) }
     }
 

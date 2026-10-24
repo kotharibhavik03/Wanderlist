@@ -1,6 +1,5 @@
 package com.rizz.wanderlist.domain.usecase
 
-import com.rizz.wanderlist.domain.model.MAX_PHOTOS_PER_SAVE
 import com.rizz.wanderlist.domain.model.PhotoChanges
 import com.rizz.wanderlist.domain.model.Place
 import com.rizz.wanderlist.domain.model.PlaceDetails
@@ -24,9 +23,6 @@ class UpdatePlaceUseCase(private val repository: PlaceRepository) {
         onPhotoUploaded: (uploaded: Int) -> Unit = {}
     ): Result<Place> {
         validatePlaceDetails(details)?.let { return Result.failure(IllegalArgumentException(it)) }
-        if (photos.added.size > MAX_PHOTOS_PER_SAVE) {
-            return Result.failure(IllegalArgumentException("You can add up to $MAX_PHOTOS_PER_SAVE photos at a time."))
-        }
         return resultOf {
             // 1. New photos first: the marker may show one of them, and it must exist by then.
             repository.addPhotos(placeId, photos.added, onPhotoUploaded)

@@ -1,6 +1,5 @@
 package com.rizz.wanderlist.views.photo
 
-import com.rizz.wanderlist.domain.model.MAX_PHOTOS_PER_SAVE
 import com.rizz.wanderlist.domain.repository.PhotoCompressor
 import com.rizz.wanderlist.util.pluralize
 import com.rizz.wanderlist.util.resultOf
@@ -24,17 +23,12 @@ internal class DraftPhotos(
     class Pending internal constructor(internal val photo: DraftPhoto, internal val source: String)
 
     /**
-     * Adds up to [room] of the picked [sources] to the form straight away, each with a spinner.
-     * Returns them for [compress], which the form runs in its own (cancellable) work.
+     * Adds the picked [sources] to the form straight away, each with a spinner. Returns them
+     * for [compress], which the form runs in its own (cancellable) work.
      */
-    fun accept(sources: List<String>, room: Int): List<Pending> {
-        if (sources.isEmpty()) return emptyList()
-        val picked = sources.distinct()
-        val accepted = picked.take(room.coerceAtLeast(0)).map { Pending(DraftPhoto(id = newPhotoId()), it) }
+    fun accept(sources: List<String>): List<Pending> {
+        val accepted = sources.distinct().map { Pending(DraftPhoto(id = newPhotoId()), it) }
         if (accepted.isNotEmpty()) updatePhotos { photos -> photos + accepted.map { it.photo } }
-        if (accepted.size < picked.size) {
-            showMessage("Added ${accepted.size} of ${picked.size} photos: you can add up to $MAX_PHOTOS_PER_SAVE at a time.")
-        }
         return accepted
     }
 

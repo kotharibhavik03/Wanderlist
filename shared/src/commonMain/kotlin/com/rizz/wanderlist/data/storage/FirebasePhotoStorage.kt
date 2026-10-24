@@ -12,13 +12,21 @@ class FirebasePhotoStorage(private val storage: FirebaseStorage) : PhotoStorage 
         val reference = storage.reference(remotePath)
         // storage.rules only accept JPEGs, and the content type is what it checks.
         reference.putFile(storageFile(localPath), storageMetadata { contentType = "image/jpeg" })
-        return reference.getDownloadUrl()
+        return withoutDefaultPort(reference.getDownloadUrl())
     }
 
     override suspend fun delete(remotePath: String) {
         storage.reference(remotePath).delete()
     }
 }
+
+/**
+ * The iOS SDK writes the HTTPS port into download URLs ("https://firebasestorage.googleapis.com:443/...");
+ * Android doesn't. Same address either way, but firestore.rules only accept the form without a port,
+ * so every stored URL uses that one.
+ */
+private fun withoutDefaultPort(url: String): String =
+    url.replaceFirst("https://firebasestorage.googleapis.com:443/", "https://firebasestorage.googleapis.com/")
 
 /** Firebase's platform file handle (an Android Uri, an iOS NSURL) for a local [path]. */
 internal expect fun storageFile(path: String): File

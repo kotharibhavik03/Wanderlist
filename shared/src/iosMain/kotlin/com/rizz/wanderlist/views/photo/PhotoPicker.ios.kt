@@ -26,19 +26,19 @@ import platform.UIKit.UIViewController
 import platform.darwin.NSObject
 
 @Composable
-actual fun rememberPhotoPicker(maxItems: Int, onPicked: (List<String>) -> Unit): PhotoPicker {
+actual fun rememberPhotoPicker(multiple: Boolean, onPicked: (List<String>) -> Unit): PhotoPicker {
     val currentOnPicked by rememberUpdatedState(onPicked)
     val viewController = LocalUIViewController.current
     val scope = rememberCoroutineScope()
-    return remember(viewController, maxItems) {
-        IosPhotoPicker(viewController, maxItems, scope) { currentOnPicked(it) }
+    return remember(viewController, multiple) {
+        IosPhotoPicker(viewController, multiple, scope) { currentOnPicked(it) }
     }
 }
 
 /** Apple's PHPicker: runs outside the app, so it needs no photo library permission. */
 private class IosPhotoPicker(
     private val host: UIViewController,
-    private val maxItems: Int,
+    private val multiple: Boolean,
     private val scope: CoroutineScope,
     private val onPicked: (List<String>) -> Unit
 ) : PhotoPicker {
@@ -48,7 +48,8 @@ private class IosPhotoPicker(
 
     override fun launch() {
         val configuration = PHPickerConfiguration().apply {
-            selectionLimit = maxItems.toLong()
+            // 0 means no limit.
+            selectionLimit = if (multiple) 0L else 1L
             filter = PHPickerFilter.imagesFilter
         }
         val picker = PHPickerViewController(configuration)

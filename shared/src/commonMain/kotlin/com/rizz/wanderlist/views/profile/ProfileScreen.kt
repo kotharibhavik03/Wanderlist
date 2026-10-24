@@ -50,7 +50,7 @@ fun ProfileRoute(
     viewModel: ProfileViewModel = koinViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val photoPicker = rememberPhotoPicker(maxItems = 1, onPicked = viewModel::onPhotoPicked)
+    val photoPicker = rememberPhotoPicker(multiple = false, onPicked = viewModel::onPhotoPicked)
     ProfileScreen(
         uiState = uiState,
         onChangePhoto = photoPicker::launch,

@@ -1,6 +1,5 @@
 package com.rizz.wanderlist.domain.usecase
 
-import com.rizz.wanderlist.domain.model.MAX_PHOTOS_PER_SAVE
 import com.rizz.wanderlist.domain.model.MarkerStyle
 import com.rizz.wanderlist.domain.model.NewPlace
 import com.rizz.wanderlist.domain.model.Place
@@ -19,9 +18,6 @@ class SavePlaceUseCase(private val repository: PlaceRepository) {
 
     private fun validate(place: NewPlace): String? {
         validatePlaceDetails(place.details)?.let { return it }
-        if (place.photos.size > MAX_PHOTOS_PER_SAVE) {
-            return "You can add up to $MAX_PHOTOS_PER_SAVE photos at a time."
-        }
         val marker = place.details.markerStyle
         return if (marker is MarkerStyle.Photo &&
             place.photos.none { it.id == marker.photoId && !it.isPrivate }

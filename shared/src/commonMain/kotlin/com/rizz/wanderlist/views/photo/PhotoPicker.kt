@@ -8,9 +8,10 @@ fun interface PhotoPicker {
 }
 
 /**
- * The platform's photo picker, letting the user choose up to [maxItems] photos. [onPicked]
- * receives what they chose (nothing if they cancelled): Android content uris, or on iOS paths
- * of copies in a temporary folder. Either can be handed to the app's PhotoCompressor.
+ * The platform's photo picker, letting the user choose as many photos as they like, or one
+ * when [multiple] is false. [onPicked] receives what they chose (nothing if they cancelled):
+ * Android content uris, or on iOS paths of copies in a temporary folder. Either can be handed
+ * to the app's PhotoCompressor.
  */
 @Composable
-expect fun rememberPhotoPicker(maxItems: Int, onPicked: (List<String>) -> Unit): PhotoPicker
+expect fun rememberPhotoPicker(multiple: Boolean = true, onPicked: (List<String>) -> Unit): PhotoPicker

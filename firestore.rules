@@ -270,8 +270,8 @@ service cloud.firestore {
         }
 
         // getAfter, so a new place and its photos can be written in one batch. Each photo costs
-        // one document lookup and a batch may make at most 20, so one save carries at most
-        // 10 photos (MAX_PHOTOS_PER_SAVE).
+        // one document lookup and a batch may make at most 20, so the app writes photos 10 per
+        // batch or transaction (PHOTOS_PER_WRITE in FirestorePlaceRepository).
         allow create: if signedIn()
           && request.resource.data.uploaderId == request.auth.uid
           && isValidPhoto(request.resource.data)

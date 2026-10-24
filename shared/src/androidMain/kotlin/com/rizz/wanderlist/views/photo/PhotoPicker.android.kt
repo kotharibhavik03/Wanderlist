@@ -10,22 +10,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 
 @Composable
-actual fun rememberPhotoPicker(maxItems: Int, onPicked: (List<String>) -> Unit): PhotoPicker {
+actual fun rememberPhotoPicker(multiple: Boolean, onPicked: (List<String>) -> Unit): PhotoPicker {
     val currentOnPicked by rememberUpdatedState(onPicked)
     // Android's photo picker (or the system file picker on old devices). The uris it returns
     // stay readable by this app while it's running, long enough to compress them.
-    // The multi-select picker needs a limit of at least 2, so one photo uses the single picker.
+    // One photo uses the single picker: the multi-select one always allows at least 2.
     val single = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
         currentOnPicked(listOfNotNull(uri?.toString()))
     }
-    val multipleContract = remember(maxItems) { PickMultipleVisualMedia(maxItems.coerceAtLeast(2)) }
-    val multiple = rememberLauncherForActivityResult(multipleContract) { uris ->
+    // No limit of our own: the system's (MediaStore.getPickImagesMaxLimit, usually 100) applies.
+    val several = rememberLauncherForActivityResult(PickMultipleVisualMedia()) { uris ->
         currentOnPicked(uris.map { it.toString() })
     }
-    return remember(single, multiple, maxItems) {
+    return remember(single, several, multiple) {
         PhotoPicker {
             val request = PickVisualMediaRequest(PickVisualMedia.ImageOnly)
-            if (maxItems <= 1) single.launch(request) else multiple.launch(request)
+            if (multiple) several.launch(request) else single.launch(request)
         }
     }
 }

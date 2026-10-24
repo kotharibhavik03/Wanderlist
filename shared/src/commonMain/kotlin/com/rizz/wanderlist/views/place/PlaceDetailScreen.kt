@@ -66,7 +66,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.rizz.wanderlist.domain.model.MAX_PHOTOS_PER_SAVE
 import com.rizz.wanderlist.domain.model.Place
 import com.rizz.wanderlist.domain.model.PlaceAccess
 import com.rizz.wanderlist.domain.model.PlaceCollection
@@ -95,12 +94,7 @@ fun PlaceDetailRoute(
     val viewModel: PlaceDetailViewModel = koinViewModel(parameters = { parametersOf(placeId) })
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val currentOnPlaceRemoved by rememberUpdatedState(onPlaceRemoved)
-    // Asks for at most what's left of the limit (a picker can't take back extra choices).
-    val photoRoom = (uiState as? PlaceDetailUiState.Content)?.photoDraft?.room ?: MAX_PHOTOS_PER_SAVE
-    val photoPicker = rememberPhotoPicker(
-        maxItems = photoRoom.coerceAtLeast(1),
-        onPicked = viewModel::onPhotosPicked
-    )
+    val photoPicker = rememberPhotoPicker(onPicked = viewModel::onPhotosPicked)
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->

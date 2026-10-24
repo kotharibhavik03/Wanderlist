@@ -1,6 +1,5 @@
 package com.rizz.wanderlist.data.firestore
 
-import com.rizz.wanderlist.domain.model.MAX_PHOTOS_PER_SAVE
 import com.rizz.wanderlist.domain.model.MarkerStyle
 import com.rizz.wanderlist.domain.model.MemberRole
 import com.rizz.wanderlist.domain.model.NewPlace
@@ -91,9 +90,15 @@ class FirestorePlaceRepository(
         requireNotAMember(owner, newPlace.details)
         val now = now()
         val reference = places.document // new auto-id, known before anything is written
+        // The place is written with its first photos; the rest follow a few at a time. A photo
+        // marker's photo goes in that first write, because the place stores the photo's URL.
+        val markerPhotoId = (newPlace.details.markerStyle as? MarkerStyle.Photo)?.photoId
+        val ordered = newPlace.photos.sortedByDescending { it.id == markerPhotoId }
+        val firstPhotos = ordered.take(PHOTOS_PER_WRITE)
+        val laterPhotos = ordered.drop(PHOTOS_PER_WRITE)
 
-        return withUploadedPhotos(reference.id, owner, newPlace.photos, now, onPhotoUploaded) { photos ->
-            // The place and its photo documents in one batch: they appear together or not at all.
+        val created = withUploadedPhotos(reference.id, owner, firstPhotos, now, onPhotoUploaded) { photos ->
+            // The place and its first photo documents in one batch: they appear together or not at all.
             // A photo marker stores its photo's URL, so the map can draw it without the photos.
             val details = newPlace.details.withMarkerPhotoUrl { photoId ->
                 photos.firstOrNull { (id, photo) -> id == photoId && !photo.isPrivate }?.second?.url
@@ -113,6 +118,24 @@ class FirestorePlaceRepository(
             batch.commit()
 
             document.toDomain(reference.id).copy(photos = photos.map { (id, photo) -> photo.toDomain(id) })
+        }
+        if (laterPhotos.isEmpty()) return created
+
+        try {
+            val added = addPhotosInWrites(reference.id, owner, laterPhotos, now) { uploaded ->
+                onPhotoUploaded(firstPhotos.size + uploaded)
+            }
+            return created.copy(photos = created.photos + added)
+        } catch (e: Throwable) {
+            // Saving a new place is all or nothing: take down the place and the photos saved so
+            // far, so trying again doesn't make a second copy. Even when cancelled.
+            withContext(NonCancellable) {
+                runCatching {
+                    val saved = places.document(reference.id).get()
+                    if (saved.exists) deleteWithPhotos(reference.id, saved.data<PlaceDocument>(), owner)
+                }
+            }
+            throw e
         }
     }
 
@@ -207,7 +230,6 @@ class FirestorePlaceRepository(
     }
 
     override suspend fun addPhotos(placeId: String, photos: List<NewPlacePhoto>, onPhotoUploaded: (uploaded: Int) -> Unit) {
-        require(photos.size <= MAX_PHOTOS_PER_SAVE) { "You can add up to $MAX_PHOTOS_PER_SAVE photos at a time." }
         if (photos.isEmpty()) return
         val user = requireSignedInUser()
         val reference = places.document(placeId)
@@ -216,26 +238,7 @@ class FirestorePlaceRepository(
         // Photos an earlier try of the same save already added (their files can't be overwritten).
         val toAdd = photos.filterNot { it.id in place.photoUploaders }
         if (toAdd.isEmpty()) return
-
-        withUploadedPhotos(placeId, user, toAdd, now(), onPhotoUploaded) { uploaded ->
-            // A transaction: the index is read and extended in one step, so photos two people
-            // add at the same moment don't overwrite each other's entries.
-            firestore.runTransaction {
-                val snapshot = get(reference)
-                val current = requireOnPlace(snapshot.takeIf { it.exists }?.data(PlaceDocument.serializer()), placeId, user)
-                val updated = current.copy(
-                    photoUploaders = current.photoUploaders + uploaded.associate { (photoId, _) -> photoId to user.id },
-                    updatedAt = now()
-                )
-                // Only the index: the rules let anyone on the place add their own photos to it.
-                set(reference, PlaceDocument.serializer(), updated, *PHOTO_INDEX_FIELDS) { encodeDefaults = true }
-                uploaded.forEach { (photoId, photo) ->
-                    set(reference.collection(PHOTOS).document(photoId), PhotoDocument.serializer(), photo) {
-                        encodeDefaults = true
-                    }
-                }
-            }
-        }
+        addPhotosInWrites(placeId, user, toAdd, now(), onPhotoUploaded)
     }
 
     override suspend fun setPhotoPrivate(placeId: String, photoId: String, isPrivate: Boolean) {
@@ -291,6 +294,48 @@ class FirestorePlaceRepository(
         // and deleting the collection again picks up the rest.
         snapshot.documents.forEach { document ->
             deleteWithPhotos(document.id, document.data<PlaceDocument>(), user)
+        }
+    }
+
+    /**
+     * Adds [photos] as [user]'s to a place that exists, [PHOTOS_PER_WRITE] at a time: each group
+     * is uploaded, then saved in one transaction with its index entries, so every group is on the
+     * place completely or not at all. If one fails, the groups before it stay. [onPhotoUploaded]
+     * counts across all groups. Returns the added photos.
+     */
+    private suspend fun addPhotosInWrites(
+        placeId: String,
+        user: User,
+        photos: List<NewPlacePhoto>,
+        createdAt: Long,
+        onPhotoUploaded: (uploaded: Int) -> Unit
+    ): List<PlacePhoto> {
+        val reference = places.document(placeId)
+        var uploadedBefore = 0
+        return photos.chunked(PHOTOS_PER_WRITE).flatMap { group ->
+            val offset = uploadedBefore
+            val added = withUploadedPhotos(placeId, user, group, createdAt, { onPhotoUploaded(offset + it) }) { uploaded ->
+                // A transaction: the index is read and extended in one step, so photos two people
+                // add at the same moment don't overwrite each other's entries.
+                firestore.runTransaction {
+                    val snapshot = get(reference)
+                    val current = requireOnPlace(snapshot.takeIf { it.exists }?.data(PlaceDocument.serializer()), placeId, user)
+                    val updated = current.copy(
+                        photoUploaders = current.photoUploaders + uploaded.associate { (photoId, _) -> photoId to user.id },
+                        updatedAt = now()
+                    )
+                    // Only the index: the rules let anyone on the place add their own photos to it.
+                    set(reference, PlaceDocument.serializer(), updated, *PHOTO_INDEX_FIELDS) { encodeDefaults = true }
+                    uploaded.forEach { (photoId, photo) ->
+                        set(reference.collection(PHOTOS).document(photoId), PhotoDocument.serializer(), photo) {
+                            encodeDefaults = true
+                        }
+                    }
+                }
+                uploaded.map { (photoId, photo) -> photo.toDomain(photoId) }
+            }
+            uploadedBefore += group.size
+            added
         }
     }
 
@@ -491,5 +536,10 @@ class FirestorePlaceRepository(
         const val PHOTOS = "photos"
         /** firestore.rules allows a batch at most 20 document lookups; deleting someone else's photo costs one. */
         const val MAX_RULE_LOOKUPS_PER_BATCH = 20
+        /**
+         * Photos saved per batch or transaction. Creating a photo costs one rule lookup (the place,
+         * via getAfter) and the place itself may cost one more, so this stays well inside the 20.
+         */
+        const val PHOTOS_PER_WRITE = 10
     }
 }
