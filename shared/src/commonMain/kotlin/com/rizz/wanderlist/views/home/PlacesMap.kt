@@ -13,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -125,6 +126,13 @@ internal fun PlacesMap(
         cameraState.animateOrJump(CameraUpdateFactory.newLatLngZoom(LatLng(pin.latitude, pin.longitude), zoom))
     }
 
+    // Markers keep their size on screen, so zoomed out they'd cover more and more of the map.
+    // They shrink in a few steps instead (each step redraws every marker image, so not smoothly).
+    val markerScale by remember { derivedStateOf { markerScaleFor(cameraState.position.zoom) } }
+    // On iOS a marker is drawn in a Compose scene of its own, which doesn't see the app's theme
+    // (Material's default colours would show). The theme is read here and handed to it.
+    val colorScheme = MaterialTheme.colorScheme
+
     Box(modifier = modifier) {
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
@@ -144,7 +152,8 @@ internal fun PlacesMap(
                     val photo = rememberLoadedPhoto(place.markerPhotoUrl, SelectedBadgeSize)
                     MarkerComposable(
                         // Re-render the marker image only when its look changes.
-                        place.markerStyle, item.collection?.icon.orEmpty(), item.collection?.colors.orEmpty(), isSelected, photo != null,
+                        place.markerStyle, item.collection?.icon.orEmpty(), item.collection?.colors.orEmpty(), isSelected,
+                        photo != null, markerScale, colorScheme,
                         state = rememberUpdatedMarkerState(LatLng(place.latitude, place.longitude)),
                         title = place.displayName,
                         // What screen readers announce for the marker (it's otherwise an unnamed button).
@@ -158,7 +167,9 @@ internal fun PlacesMap(
                             true // handled: don't also show the default info window
                         }
                     ) {
-                        MapBadge(item, isSelected, photo)
+                        MaterialTheme(colorScheme = colorScheme) {
+                            MapBadge(item, isSelected, photo, markerScale)
+                        }
                     }
                 }
             }
@@ -183,12 +194,13 @@ internal fun PlacesMap(
 
 /**
  * The place's marker on a ring, so it stands out from any map background, with a small tail
- * pointing at the spot. The selected one is larger with a primary-coloured ring and tail.
+ * pointing at the spot. The selected one is larger with a primary-coloured ring and tail, and
+ * always full size; the others are drawn at [scale] (see [markerScaleFor]).
  */
 @Composable
-private fun MapBadge(item: HomePlace, isSelected: Boolean, photo: Painter?) {
+private fun MapBadge(item: HomePlace, isSelected: Boolean, photo: Painter?, scale: Float) {
     val ringColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
-    val badgeSize = if (isSelected) SelectedBadgeSize else BadgeSize
+    val badgeSize = if (isSelected) SelectedBadgeSize else BadgeSize * scale
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
@@ -202,8 +214,8 @@ private fun MapBadge(item: HomePlace, isSelected: Boolean, photo: Painter?) {
         }
         MarkerTail(
             ringColor,
-            width = if (isSelected) SelectedTailWidth else TailWidth,
-            height = if (isSelected) 10.dp else 7.dp
+            width = if (isSelected) SelectedTailWidth else TailWidth * scale,
+            height = if (isSelected) 10.dp else 7.dp * scale
         )
     }
 }
@@ -258,6 +270,17 @@ private fun cameraUpdateFor(places: List<HomePlace>): CameraUpdate {
  * map; the selected one grows to stand out.
  */
 private val BadgeSize = 32.dp
+
+/**
+ * How big markers are drawn at [zoom]: full size from city level in, a little smaller at region
+ * level, smaller again for a country or the world. Steps, not a smooth curve: each change
+ * redraws every marker image.
+ */
+private fun markerScaleFor(zoom: Float): Float = when {
+    zoom >= 10f -> 1f
+    zoom >= 6f -> 0.85f
+    else -> 0.7f
+}
 
 /** The selected marker's size, the largest a marker gets; photos are loaded at this size. */
 private val SelectedBadgeSize = 52.dp
