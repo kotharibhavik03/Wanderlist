@@ -51,7 +51,7 @@ fun SignInScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // The app's logo (the launcher icon as a rounded tile). Decorative: the name follows.
+            // The app's logo on a transparent background. Decorative: the name follows.
             Image(
                 painter = painterResource(Res.drawable.app_logo_transparent),
                 contentDescription = null,
