@@ -433,8 +433,8 @@ class FirestorePlaceRepository(
 
     /**
      * Deletes photo files (id to uploader): each photo and its thumbnail. Best effort: a file that
-     * is already gone (photos saved before thumbnails have none), or can't be deleted right now, is
-     * left behind; its document is already deleted, so nobody can find it.
+     * is already gone, or can't be deleted right now, is left behind; its document is already
+     * deleted, so nobody can find it.
      */
     private suspend fun deletePhotoFiles(placeId: String, photos: Map<String, String>) {
         photos.forEach { (photoId, uploaderId) ->

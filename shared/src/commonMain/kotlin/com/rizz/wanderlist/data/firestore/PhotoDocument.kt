@@ -15,11 +15,6 @@ import kotlinx.serialization.Serializable
 @Serializable
 internal data class PhotoDocument(
     val uploaderId: String = "",
-    /**
-     * Only on photos saved before files were loaded by location: their public download link.
-     * Never read, never written; the photo migration script removes it.
-     */
-    val url: String? = null,
     val isPrivate: Boolean = false,
     /** Client clock, epoch millis. */
     val createdAt: Long = 0

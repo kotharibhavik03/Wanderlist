@@ -55,12 +55,7 @@ internal data class PlaceDocument(
 internal data class MarkerDocument(
     val type: String = TYPE_COLLECTION,
     val iconKey: String? = null,
-    val photoId: String? = null,
-    /**
-     * Only on places saved before files were loaded by location: the marker photo's public
-     * download link. Never read; written as null, and the photo migration script removes it.
-     */
-    val photoUrl: String? = null
+    val photoId: String? = null
 ) {
     companion object {
         const val TYPE_COLLECTION = "COLLECTION"

@@ -162,11 +162,9 @@ service cloud.firestore {
           && data.notes is string && data.notes.size() <= 2000
           && data.marker is map
           && data.marker.keys().hasOnly(['type', 'iconKey', 'photoId', 'photoUrl'])
-          // A photo marker's download URL: only on places saved by older app versions (the app
-          // now finds the marker photo's files from its id and the photo index).
-          && (data.marker.get('photoUrl', null) == null
-              || (data.marker.photoUrl is string && data.marker.photoUrl.size() <= 2000
-                  && data.marker.photoUrl.matches('https://firebasestorage[.]googleapis[.]com/.*')))
+          // The marker photo's files are found from its id and the photo index. Places saved by
+          // an older app version may still hold an empty photoUrl key; a link is never accepted.
+          && data.marker.get('photoUrl', null) == null
           && data.members is list && data.members.size() <= 50
           && data.memberEmails is list && data.memberEmails.size() == data.members.size()
           && data.collaboratorEmails is list
@@ -251,13 +249,9 @@ service cloud.firestore {
 
         // Field names mirror PhotoDocument. The photo's files are found from the place, the
         // uploader and the photo id (storage.rules checks who may download them), so nothing
-        // about Storage is stored. Only older app versions still send a download URL; when they
-        // do, it must be a Firebase Storage one.
+        // about Storage is stored.
         function isValidPhoto(data) {
-          return data.keys().hasOnly(['uploaderId', 'url', 'isPrivate', 'createdAt'])
-            && (data.get('url', null) == null
-                || (data.url is string && data.url.size() <= 2000
-                    && data.url.matches('https://firebasestorage[.]googleapis[.]com/.*')))
+          return data.keys().hasOnly(['uploaderId', 'isPrivate', 'createdAt'])
             && data.isPrivate is bool
             && data.createdAt is int;
         }
