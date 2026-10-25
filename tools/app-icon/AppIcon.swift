@@ -1,202 +1,201 @@
-// Draws Wanderlist's app icon (a gold pocket compass) and writes every size Android and iOS need.
+// Builds Wanderlist's app icon from the logo artwork and writes every size Android and iOS need.
 //
 // Run from the repository root:   swift tools/app-icon/AppIcon.swift
 //
-// The compass is vector-drawn with CoreGraphics, so each file is rendered at its exact pixel size
-// (no upscaling). It is laid out around the dial's centre, not the centre of its bounding box: the
-// ring at the top right would otherwise pull the dial off-centre. Sizes follow each platform's
-// safe area: on Android everything stays inside the 66dp circle no launcher mask ever cuts.
+// The source (logo-source.png, next to this file) is a picture of the logo: the artwork on a cream
+// card with a ragged edge, inside a white border. Used as is, that border and edge would show
+// inside every launcher mask. So the script finds the artwork, fades everything around it to one
+// flat cream, and re-centres the artwork at the size each platform's safe area allows. To change
+// the logo, replace logo-source.png (artwork on a plain light background) and run the script again.
 
 import CoreGraphics
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-// MARK: - Colours
+let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
 
-func rgb(_ hex: UInt32, _ alpha: CGFloat = 1) -> CGColor {
-    CGColor(
-        srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
-        green: CGFloat((hex >> 8) & 0xFF) / 255,
-        blue: CGFloat(hex & 0xFF) / 255,
-        alpha: alpha
-    )
+// MARK: - Source
+
+struct Bitmap {
+    let width: Int
+    let height: Int
+    var pixels: [UInt8] // RGBA, top row first
+
+    func channel(_ x: Int, _ y: Int, _ c: Int) -> Int { Int(pixels[(y * width + x) * 4 + c]) }
 }
 
-/// The Android adaptive icon background (values/ic_launcher_background.xml) and the iOS background.
-let background = rgb(0xFFF9F0)
-let goldLight = rgb(0xFFD84A)
-let goldDark = rgb(0xF2A900)
-let goldEdge = rgb(0xDE9700)
-let goldBevel = rgb(0xEBA500)
-let face = rgb(0xFFFCF5)
-let tick = rgb(0xB8AB98)
-let roseLight = rgb(0xEADBC4)
-let roseDark = rgb(0xCDB693)
-let roseMinorLight = rgb(0xC9B18F)
-let roseMinorDark = rgb(0xAE9573)
-let redLight = rgb(0xF2503F)
-let redDark = rgb(0xD63A2E)
-let tealLight = rgb(0x22899B)
-let tealDark = rgb(0x176B79)
-let cap = rgb(0xBBD7E0)
-let capEdge = rgb(0x8DB2C0)
-
-// MARK: - Drawing
-
-/// A point at [distance] from [center] in direction [degrees] (0 = up, clockwise; y grows downwards).
-func polar(_ center: CGPoint, _ degrees: CGFloat, _ distance: CGFloat) -> CGPoint {
-    let radians = degrees * .pi / 180
-    return CGPoint(x: center.x + sin(radians) * distance, y: center.y - cos(radians) * distance)
+func load(_ path: String) -> Bitmap {
+    guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
+          let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+    else { fatalError("Couldn't read \(path)") }
+    var bitmap = Bitmap(width: image.width, height: image.height, pixels: [UInt8](repeating: 0, count: image.width * image.height * 4))
+    let ctx = CGContext(
+        data: &bitmap.pixels, width: image.width, height: image.height, bitsPerComponent: 8,
+        bytesPerRow: image.width * 4, space: sRGB, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    )!
+    ctx.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+    return bitmap
 }
 
-func fillCircle(_ ctx: CGContext, _ center: CGPoint, _ radius: CGFloat, _ color: CGColor) {
-    ctx.setFillColor(color)
-    ctx.fillEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
+var logo = load("tools/app-icon/logo-source.png")
+let w = logo.width, h = logo.height
+
+/// The card's cream, averaged over a patch near its top-left corner (inside the white border).
+let cream: [Int] = {
+    var sum = [0, 0, 0], count = 0
+    for y in h / 10..<h * 18 / 100 { for x in w / 10..<w * 18 / 100 {
+        for c in 0..<3 { sum[c] += logo.channel(x, y, c) }
+        count += 1
+    } }
+    return sum.map { $0 / count }
+}()
+let background = CGColor(srgbRed: CGFloat(cream[0]) / 255, green: CGFloat(cream[1]) / 255, blue: CGFloat(cream[2]) / 255, alpha: 1)
+
+/// How far a pixel is from the cream: the largest difference of its three channels.
+func distanceFromCream(_ x: Int, _ y: Int) -> Int {
+    (0..<3).map { abs(logo.channel(x, y, $0) - cream[$0]) }.max()!
 }
 
-func fillTriangle(_ ctx: CGContext, _ a: CGPoint, _ b: CGPoint, _ c: CGPoint, _ color: CGColor) {
-    ctx.setFillColor(color)
-    ctx.beginPath()
-    ctx.move(to: a)
-    ctx.addLine(to: b)
-    ctx.addLine(to: c)
-    ctx.closePath()
-    ctx.fillPath()
+/// The bounding box of the pixels further than [threshold] from the cream. Only the inner 80% is
+/// searched, so the border and the card's ragged edge never count.
+func bounds(threshold: Int) -> CGRect {
+    var x0 = w, y0 = h, x1 = 0, y1 = 0
+    for y in h / 10..<h * 9 / 10 { for x in w / 10..<w * 9 / 10 where distanceFromCream(x, y) > threshold {
+        x0 = min(x0, x); x1 = max(x1, x); y0 = min(y0, y); y1 = max(y1, y)
+    } }
+    return CGRect(x: x0, y: y0, width: x1 - x0 + 1, height: y1 - y0 + 1)
 }
 
-/// A gold disc with a top-left to bottom-right gradient.
-func goldDisc(_ ctx: CGContext, _ center: CGPoint, _ radius: CGFloat) {
-    ctx.saveGState()
-    ctx.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
-    ctx.clip()
-    let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: [goldLight, goldDark] as CFArray, locations: [0, 1])!
-    ctx.drawLinearGradient(
-        gradient,
-        start: CGPoint(x: center.x - radius, y: center.y - radius),
-        end: CGPoint(x: center.x + radius, y: center.y + radius),
-        options: []
-    )
-    ctx.restoreGState()
-}
+/// The artwork's box (what gets centred and sized).
+let artwork = bounds(threshold: 18)
+let centre = CGPoint(x: artwork.midX, y: artwork.midY)
 
-/// One point of the compass rose, split down its middle into a light and a dark half.
-func rosePoint(_ ctx: CGContext, _ c: CGPoint, _ degrees: CGFloat, length: CGFloat, width: CGFloat, light: CGColor, dark: CGColor) {
-    let tip = polar(c, degrees, length)
-    fillTriangle(ctx, c, tip, polar(c, degrees - 45, width), light)
-    fillTriangle(ctx, c, tip, polar(c, degrees + 45, width), dark)
-}
+/// The artwork pixel furthest from the centre: what has to fit inside a circular mask.
+let artworkRadius: CGFloat = {
+    var furthest: CGFloat = 0
+    for y in Int(artwork.minY)..<Int(artwork.maxY) { for x in Int(artwork.minX)..<Int(artwork.maxX) where distanceFromCream(x, y) > 18 {
+        furthest = max(furthest, hypot(CGFloat(x) + 0.5 - centre.x, CGFloat(y) + 0.5 - centre.y))
+    } }
+    return furthest
+}()
 
-/// The compass, its dial centred on [c], with case radius [r]. Everything, the ring included,
-/// stays within 1.35 r of the centre. The hole in the ring shows [behind]: the backdrop's
-/// colour, or nil to cut it out (transparent).
-func drawCompass(_ ctx: CGContext, _ c: CGPoint, _ r: CGFloat, behind: CGColor?) {
-    // The ring at the top right, behind the case: a neck, then the ring itself.
-    let ringAngle: CGFloat = 45
-    let ringCenter = polar(c, ringAngle, 1.17 * r)
-    fillCircle(ctx, polar(c, ringAngle, 1.0 * r), 0.13 * r, goldEdge)
-    fillCircle(ctx, ringCenter, 0.18 * r, goldEdge)
-    fillCircle(ctx, ringCenter, 0.155 * r, goldDark)
-    if let behind {
-        fillCircle(ctx, ringCenter, 0.085 * r, behind)
-    } else {
-        ctx.saveGState()
-        ctx.setBlendMode(.clear)
-        fillCircle(ctx, ringCenter, 0.085 * r, rgb(0x000000))
-        ctx.restoreGState()
-    }
-
-    // The case: an edge, the gold body, a darker bevel, then the face.
-    fillCircle(ctx, c, r, goldEdge)
-    goldDisc(ctx, c, 0.965 * r)
-    fillCircle(ctx, c, 0.83 * r, goldBevel)
-    fillCircle(ctx, c, 0.78 * r, face)
-
-    // Ticks: dots at north, east, south and west, short dashes between them.
-    for i in 0..<8 {
-        let degrees = CGFloat(i) * 45
-        if i % 2 == 0 {
-            fillCircle(ctx, polar(c, degrees, 0.665 * r), 0.042 * r, tick)
-        } else {
-            ctx.setStrokeColor(tick)
-            ctx.setLineWidth(0.04 * r)
-            ctx.setLineCap(.round)
-            ctx.beginPath()
-            ctx.move(to: polar(c, degrees, 0.62 * r))
-            ctx.addLine(to: polar(c, degrees, 0.71 * r))
-            ctx.strokePath()
+/// Each pixel's distance (in px) to the nearest pixel of the artwork or its soft shadow (further
+/// than 10 levels from the cream), by a two-pass chamfer distance transform. Following the outline
+/// rather than a box matters: the source has faint smudges near its corners, inside the box.
+let distanceToArtwork: [CGFloat] = {
+    let far = CGFloat(w + h)
+    var d = [CGFloat](repeating: far, count: w * h)
+    for y in h / 10..<h * 9 / 10 { for x in w / 10..<w * 9 / 10 where distanceFromCream(x, y) > 10 { d[y * w + x] = 0 } }
+    let diagonal: CGFloat = 1.4142
+    for y in 0..<h { for x in 0..<w {
+        var v = d[y * w + x]
+        if x > 0 { v = min(v, d[y * w + x - 1] + 1) }
+        if y > 0 {
+            v = min(v, d[(y - 1) * w + x] + 1)
+            if x > 0 { v = min(v, d[(y - 1) * w + x - 1] + diagonal) }
+            if x < w - 1 { v = min(v, d[(y - 1) * w + x + 1] + diagonal) }
         }
-    }
+        d[y * w + x] = v
+    } }
+    for y in stride(from: h - 1, through: 0, by: -1) { for x in stride(from: w - 1, through: 0, by: -1) {
+        var v = d[y * w + x]
+        if x < w - 1 { v = min(v, d[y * w + x + 1] + 1) }
+        if y < h - 1 {
+            v = min(v, d[(y + 1) * w + x] + 1)
+            if x < w - 1 { v = min(v, d[(y + 1) * w + x + 1] + diagonal) }
+            if x > 0 { v = min(v, d[(y + 1) * w + x - 1] + diagonal) }
+        }
+        d[y * w + x] = v
+    } }
+    return d
+}()
 
-    // The rose: four short diagonal points behind four long ones.
-    for i in 0..<4 {
-        rosePoint(ctx, c, 45 + CGFloat(i) * 90, length: 0.40 * r, width: 0.10 * r, light: roseMinorLight, dark: roseMinorDark)
+// Fade everything around the artwork to the flat cream: fully kept up to 12 px from it, fully
+// cream 30 px further out. The cream there only varies by a level or two, so the fade can't be
+// seen, and the result can be scaled and placed on a cream backdrop of any size without a seam.
+let keep: CGFloat = 12
+let fade: CGFloat = 30
+for y in 0..<h { for x in 0..<w {
+    let t = min(max(distanceToArtwork[y * w + x] - keep, 0) / fade, 1)
+    let amount = t * t * (3 - 2 * t) // smoothstep
+    for c in 0..<3 {
+        let i = (y * w + x) * 4 + c
+        logo.pixels[i] = UInt8((CGFloat(logo.pixels[i]) * (1 - amount) + CGFloat(cream[c]) * amount).rounded())
     }
-    for i in 0..<4 {
-        rosePoint(ctx, c, CGFloat(i) * 90, length: 0.58 * r, width: 0.12 * r, light: roseLight, dark: roseDark)
-    }
+    logo.pixels[(y * w + x) * 4 + 3] = 255
+} }
 
-    // The needle: red towards the top right, teal towards the bottom left, each in two shades.
-    let north: CGFloat = 45
-    let red = polar(c, north, 0.56 * r)
-    let teal = polar(c, north + 180, 0.56 * r)
-    let left = polar(c, north - 90, 0.095 * r)
-    let right = polar(c, north + 90, 0.095 * r)
-    fillTriangle(ctx, red, left, c, redLight)
-    fillTriangle(ctx, red, right, c, redDark)
-    fillTriangle(ctx, teal, left, c, tealLight)
-    fillTriangle(ctx, teal, right, c, tealDark)
-
-    // The cap over the pivot, with a small highlight.
-    fillCircle(ctx, c, 0.115 * r, capEdge)
-    fillCircle(ctx, c, 0.09 * r, cap)
-    fillCircle(ctx, CGPoint(x: c.x - 0.03 * r, y: c.y - 0.03 * r), 0.035 * r, rgb(0xFFFFFF, 0.75))
+let cleanLogo: CGImage = logo.pixels.withUnsafeMutableBytes { bytes in
+    CGContext(
+        data: bytes.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+        space: sRGB, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    )!.makeImage()!
 }
+
+print("cream #\(cream.map { String(format: "%02X", $0) }.joined()), artwork \(artwork), radius \(Int(artworkRadius)) px")
 
 // MARK: - Output
 
 enum Backdrop {
-    case none                        // transparent (adaptive foreground, iOS dark)
-    case fill                        // the whole canvas (iOS: the system rounds the corners)
-    case roundedSquare               // legacy Android launcher icon
+    case fill                        // the whole canvas (iOS and the adaptive foreground)
+    case roundedSquare(inset: Bool)  // legacy Android launcher icon (inset) and the in-app logo
     case circle                      // legacy Android round icon
 }
 
-/// Renders a [size] px icon: [backdrop] in the background colour, and the compass with its dial
-/// centred and its case radius [caseRatio] of the size. A full-canvas backdrop is written without
-/// an alpha channel: the App Store rejects icons that have one, even when nothing is transparent.
-func render(size: Int, backdrop: Backdrop, caseRatio: CGFloat, to path: String) {
+enum Fit {
+    case height(CGFloat)             // the artwork's height as a fraction of the size
+    case radius(CGFloat)             // the artwork's furthest pixel from its centre, as a fraction
+}
+
+/// Renders a [size] px icon: the [backdrop] in cream, with the artwork centred and scaled to [fit].
+/// A full-canvas backdrop is written without an alpha channel: the App Store rejects icons that
+/// have one, even when nothing is transparent.
+func render(size: Int, backdrop: Backdrop, fit: Fit, to path: String) {
     let s = CGFloat(size)
-    let opaque = backdrop == .fill
+    let opaque = if case .fill = backdrop { true } else { false }
     let ctx = CGContext(
-        data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
-        space: CGColorSpace(name: CGColorSpace.sRGB)!,
+        data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0, space: sRGB,
         bitmapInfo: (opaque ? CGImageAlphaInfo.noneSkipLast : CGImageAlphaInfo.premultipliedLast).rawValue
     )!
-    // Top-left origin, y downwards, like the design coordinates above.
-    ctx.translateBy(x: 0, y: s)
-    ctx.scaleBy(x: 1, y: -1)
     ctx.setShouldAntialias(true)
     ctx.interpolationQuality = .high
 
+    // CoreGraphics' origin is bottom-left; every shape here is symmetric, so only the image
+    // placement below needs to think about it.
     let inset = s / 24 // legacy icons leave a small margin, as Android's own templates do
+    let shape: CGPath
     switch backdrop {
-    case .none:
-        break
     case .fill:
-        ctx.setFillColor(background)
-        ctx.fill(CGRect(x: 0, y: 0, width: s, height: s))
-    case .roundedSquare:
-        let rect = CGRect(x: inset, y: inset, width: s - 2 * inset, height: s - 2 * inset)
-        ctx.addPath(CGPath(roundedRect: rect, cornerWidth: s * 0.18, cornerHeight: s * 0.18, transform: nil))
-        ctx.setFillColor(background)
-        ctx.fillPath()
+        shape = CGPath(rect: CGRect(x: 0, y: 0, width: s, height: s), transform: nil)
+    case .roundedSquare(let hasInset):
+        let rect = CGRect(x: 0, y: 0, width: s, height: s).insetBy(dx: hasInset ? inset : 0, dy: hasInset ? inset : 0)
+        let corner = hasInset ? s * 0.18 : s * 0.2237 // the in-app logo uses iOS's icon corner
+        shape = CGPath(roundedRect: rect, cornerWidth: corner, cornerHeight: corner, transform: nil)
     case .circle:
-        fillCircle(ctx, CGPoint(x: s / 2, y: s / 2), s / 2 - inset, background)
+        shape = CGPath(ellipseIn: CGRect(x: inset, y: inset, width: s - 2 * inset, height: s - 2 * inset), transform: nil)
     }
+    ctx.addPath(shape)
+    ctx.setFillColor(background)
+    ctx.fillPath()
 
-    // Wherever there's a backdrop behind the ring (all but the transparent ones), its hole shows it.
-    drawCompass(ctx, CGPoint(x: s / 2, y: s / 2), caseRatio * s, behind: backdrop == .none ? nil : background)
+    let scale: CGFloat = switch fit {
+    case .height(let fraction): fraction * s / artwork.height
+    case .radius(let fraction): fraction * s / artworkRadius
+    }
+    // Place the source so the artwork's centre lands on the canvas centre (source y runs down,
+    // the context's y runs up, hence the flip of the vertical offset).
+    let drawn = CGRect(
+        x: s / 2 - centre.x * scale,
+        y: s / 2 - (CGFloat(h) - centre.y) * scale,
+        width: CGFloat(w) * scale,
+        height: CGFloat(h) * scale
+    )
+    ctx.saveGState()
+    ctx.addPath(shape)
+    ctx.clip()
+    ctx.draw(cleanLogo, in: drawn)
+    ctx.restoreGState()
 
     let url = URL(fileURLWithPath: path)
     try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -206,24 +205,23 @@ func render(size: Int, backdrop: Backdrop, caseRatio: CGFloat, to path: String) 
     print("wrote \(path) (\(size)px)")
 }
 
-// Android adaptive foreground: a 108dp canvas, 432 px at xxxhdpi. The compass reaches 1.35 × its
-// case radius, so a case radius of 0.226 keeps it all inside the 66dp (0.611) safe circle.
+// Android adaptive foreground: a 108dp canvas, 432 px at xxxhdpi, opaque cream like the background
+// layer. Launcher masks only ever cut outside the 66dp circle (radius 0.306 of the canvas), so the
+// artwork's furthest pixel stays at 0.29.
 let res = "androidApp/src/main/res"
-render(size: 432, backdrop: .none, caseRatio: 0.226, to: "\(res)/drawable-nodpi/ic_launcher_foreground.png")
+render(size: 432, backdrop: .fill, fit: .radius(0.29), to: "\(res)/drawable-nodpi/ic_launcher_foreground.png")
 
 // Android legacy icons (API 24-25 and launchers without adaptive icons).
 for (density, size) in [("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144), ("xxxhdpi", 192)] {
-    render(size: size, backdrop: .roundedSquare, caseRatio: 0.27, to: "\(res)/mipmap-\(density)/ic_launcher.png")
-    render(size: size, backdrop: .circle, caseRatio: 0.27, to: "\(res)/mipmap-\(density)/ic_launcher_round.png")
+    render(size: size, backdrop: .roundedSquare(inset: true), fit: .height(0.66), to: "\(res)/mipmap-\(density)/ic_launcher.png")
+    render(size: size, backdrop: .circle, fit: .radius(0.38), to: "\(res)/mipmap-\(density)/ic_launcher_round.png")
 }
 
-// iOS: one 1024 px image; the system masks the corners. Opaque (App Store icons can't have alpha),
-// plus a dark-mode version on a transparent background, which iOS puts on its own dark backdrop.
+// iOS: one 1024 px image; the system masks the corners. Opaque, since App Store icons can't have alpha.
 let appIcon = "iosApp/iosApp/Assets.xcassets/AppIcon.appiconset"
-render(size: 1024, backdrop: .fill, caseRatio: 0.30, to: "\(appIcon)/app-icon-1024.png")
-render(size: 1024, backdrop: .none, caseRatio: 0.30, to: "\(appIcon)/app-icon-1024-dark.png")
+render(size: 1024, backdrop: .fill, fit: .height(0.76), to: "\(appIcon)/app-icon-1024.png")
 
-// The logo inside the app (sign-in screen): the compass on a transparent background, filling its
-// frame (1.35 × 0.37 = 0.5 of the size from the dial's centre), so it suits light and dark themes.
-// 384 px covers the largest size it's drawn at (112dp at 3x).
-render(size: 384, backdrop: .none, caseRatio: 0.37, to: "shared/src/commonMain/composeResources/drawable/app_logo.png")
+// The logo inside the app (sign-in screen): the icon as a rounded tile on a transparent
+// background, so it suits light and dark themes. 384 px covers the largest size it's drawn at
+// (112dp at 3x).
+render(size: 384, backdrop: .roundedSquare(inset: false), fit: .height(0.76), to: "shared/src/commonMain/composeResources/drawable/app_logo.png")

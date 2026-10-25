@@ -19,6 +19,7 @@ import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.viewmodel.koinViewModel
 import wanderlist.shared.generated.resources.Res
 import wanderlist.shared.generated.resources.app_logo
+import wanderlist.shared.generated.resources.app_logo_transparent
 
 @Composable
 fun SignInRoute(viewModel: SignInViewModel = koinViewModel()) {
@@ -50,9 +51,9 @@ fun SignInScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // The app's logo (the same compass as the launcher icon). Decorative: the name follows.
+            // The app's logo (the launcher icon as a rounded tile). Decorative: the name follows.
             Image(
-                painter = painterResource(Res.drawable.app_logo),
+                painter = painterResource(Res.drawable.app_logo_transparent),
                 contentDescription = null,
                 modifier = Modifier.size(112.dp)
             )
