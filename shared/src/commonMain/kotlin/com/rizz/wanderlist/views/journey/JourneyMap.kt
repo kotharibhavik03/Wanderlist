@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +50,7 @@ import eu.buney.maps.PatternItem
 import eu.buney.maps.Polyline
 import eu.buney.maps.rememberCameraPositionState
 import eu.buney.maps.rememberUpdatedMarkerState
+import kotlinx.coroutines.delay
 
 /** How close the camera comes to a stop: the place and its surroundings. */
 private const val StopZoom = 12f
@@ -56,8 +58,9 @@ private const val StopZoom = 12f
 /**
  * The journey on a map: a numbered marker per stop and the route between them, solid where the
  * replay has been ([reachedStops]) and dashed where it's still going. The current stop is drawn
- * large with its own marker, and the camera follows [position]: the whole route on the overview
- * and at the end, the current stop otherwise.
+ * large with its own marker, and the leg that led to it is drawn thicker. The camera follows
+ * [position]: the whole route on the overview and at the end, the current stop otherwise. Arriving
+ * at a stop first frames the leg from the previous stop, so you see where you came from.
  */
 @Composable
 internal fun JourneyMap(
@@ -75,22 +78,39 @@ internal fun JourneyMap(
     val properties = rememberMapProperties()
     val points = remember(journey) { journey.stops.map { LatLng(it.place.latitude, it.place.longitude) } }
     val currentIndex = (position as? JourneyPosition.AtStop)?.index
+    val legPaddingPx = with(LocalDensity.current) { LegPadding.roundToPx() }
+    // The stop the camera last arrived at. Saved, so turning the phone (or the panels' padding
+    // arriving) settles on the stop again instead of replaying the leg.
+    var arrivedAt by rememberSaveable { mutableStateOf<Int?>(null) }
 
     // Follow the replay. Only after the map has loaded (framing bounds on a map with no size
     // crashes on Android), and again when the panels' padding is known, so the framing uses it.
     LaunchedEffect(mapLoaded, position, points, contentPadding) {
         if (!mapLoaded || points.isEmpty()) return@LaunchedEffect
-        val update = if (currentIndex != null) {
-            CameraUpdateFactory.newLatLngZoom(points[currentIndex], StopZoom)
-        } else {
-            wholeRoute(points)
+        if (currentIndex == null) {
+            arrivedAt = null
+            cameraState.animateOrJump(wholeRoute(points))
+            return@LaunchedEffect
         }
-        cameraState.animateOrJump(update)
+        // A new stop: first the leg from the previous one, held for a moment. Skipped for the
+        // first stop, and for a short leg, which the stop's own view already shows.
+        val previous = points.getOrNull(currentIndex - 1)
+        val legKm = journey.stops[currentIndex].kmFromPrevious ?: 0.0
+        if (arrivedAt != currentIndex && previous != null && legKm >= MinLegKm) {
+            val leg = CameraUpdateFactory.newLatLngBounds(legBounds(previous, points[currentIndex]), legPaddingPx)
+            val completed = cameraState.animateOrJump(leg, LegFlightMs)
+            arrivedAt = currentIndex
+            if (!completed) return@LaunchedEffect // the user took over the map
+            delay(LegHoldMs)
+        }
+        arrivedAt = currentIndex
+        cameraState.animateOrJump(CameraUpdateFactory.newLatLngZoom(points[currentIndex], StopZoom), StopFlightMs)
     }
 
     // On iOS a marker is drawn in a Compose scene of its own, which doesn't see the app's theme.
     val colorScheme = MaterialTheme.colorScheme
     val lineWidth = with(LocalDensity.current) { RouteWidth.toPx() }
+    val currentLegWidth = with(LocalDensity.current) { CurrentLegWidth.toPx() }
     val dash = with(LocalDensity.current) { listOf(PatternItem.Dash(12.dp.toPx()), PatternItem.Gap(8.dp.toPx())) }
 
     Box(modifier = modifier) {
@@ -126,6 +146,18 @@ internal fun JourneyMap(
                     startCap = Cap.Round,
                     endCap = Cap.Round,
                     zIndex = 1f
+                )
+            }
+            // The leg that led to the current stop: thicker, on top of the rest of the route.
+            if (currentIndex != null && currentIndex > 0) {
+                Polyline(
+                    points = listOf(points[currentIndex - 1], points[currentIndex]),
+                    color = colorScheme.primary,
+                    width = currentLegWidth,
+                    geodesic = true,
+                    startCap = Cap.Round,
+                    endCap = Cap.Round,
+                    zIndex = 2f
                 )
             }
 
@@ -233,7 +265,25 @@ private fun wholeRoute(points: List<LatLng>): CameraUpdate {
     }
 }
 
+/** Both ends of a leg; the camera fits it with [LegPadding] around it. */
+private fun legBounds(from: LatLng, to: LatLng) = LatLngBounds(
+    LatLng(minOf(from.latitude, to.latitude), minOf(from.longitude, to.longitude)),
+    LatLng(maxOf(from.latitude, to.latitude), maxOf(from.longitude, to.longitude))
+)
+
 private val RouteWidth = 4.dp
+private val CurrentLegWidth = 7.dp
+
+/** Room around a framed leg: enough for the current stop's marker, which stands above its spot. */
+private val LegPadding = 72.dp
+
+/** Legs shorter than this are already in view at [StopZoom], so the camera goes straight to the stop. */
+private const val MinLegKm = 10.0
+
+/** How long the camera takes to frame a leg, how long it holds there, then how long to reach the stop. */
+private const val LegFlightMs = 1_200
+private const val LegHoldMs = 700L
+private const val StopFlightMs = 1_200
 private val NumberedStopSize = 28.dp
 private val CurrentStopSize = 52.dp
 private val RingWidth = 3.dp

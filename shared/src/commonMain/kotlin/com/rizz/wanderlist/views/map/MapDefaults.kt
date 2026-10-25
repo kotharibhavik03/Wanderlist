@@ -79,16 +79,20 @@ private val LogoTapAreaWidth = 110.dp
 private val LogoTapAreaHeight = 72.dp
 
 /**
- * Animates to [update]. If something other than the user's finger interrupts the animation (for
- * example the keyboard closing as a search result is picked), jumps there instead, so the camera
- * never stops halfway. A user dragging the map is left alone.
+ * Animates to [update], over [durationMs] or the map's default duration. If something other than
+ * the user's finger interrupts the animation (for example the keyboard closing as a search result
+ * is picked), jumps there instead, so the camera never stops halfway. A user dragging the map is
+ * left alone. Returns false only in that case, so a sequence of moves can stop for the user.
  */
-internal suspend fun CameraPositionState.animateOrJump(update: CameraUpdate) {
+internal suspend fun CameraPositionState.animateOrJump(update: CameraUpdate, durationMs: Int = Int.MAX_VALUE): Boolean {
     try {
-        animate(update)
+        animate(update, durationMs)
+        return true
     } catch (e: CancellationException) {
         // Our own coroutine was cancelled (e.g. a newer selection): stop here.
         currentCoroutineContext().ensureActive()
-        if (cameraMoveStartedReason != CameraMoveStartedReason.GESTURE) move(update)
+        if (cameraMoveStartedReason == CameraMoveStartedReason.GESTURE) return false
+        move(update)
+        return true
     }
 }
