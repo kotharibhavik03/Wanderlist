@@ -36,4 +36,7 @@ sealed interface Route : NavKey {
 
     @Serializable
     data class EditPlace(val placeId: String) : Route
+
+    @Serializable
+    data class JourneyReplay(val collectionId: String) : Route
 }

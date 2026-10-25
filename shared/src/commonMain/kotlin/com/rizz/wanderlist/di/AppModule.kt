@@ -21,6 +21,7 @@ import com.rizz.wanderlist.views.auth.SignInViewModel
 import com.rizz.wanderlist.views.collection.CollectionDetailViewModel
 import com.rizz.wanderlist.views.collection.CollectionFormViewModel
 import com.rizz.wanderlist.views.collection.CollectionsViewModel
+import com.rizz.wanderlist.views.journey.JourneyReplayViewModel
 import com.rizz.wanderlist.views.home.HomeViewModel
 import com.rizz.wanderlist.views.mapPicker.MapPickerViewModel
 import com.rizz.wanderlist.views.place.AddPlaceViewModel
@@ -61,5 +62,6 @@ val appModule = module {
     factory { SavePlaceUseCase(get()) }
     factory { UpdatePlaceUseCase(get()) }
     viewModel { (collectionId: String) -> CollectionDetailViewModel(collectionId, get(), get(), get()) }
+    viewModel { (collectionId: String) -> JourneyReplayViewModel(collectionId, get(), get()) }
     viewModel { (placeId: String) -> PlaceDetailViewModel(placeId, get(), get(), get(), get(), get()) }
 }

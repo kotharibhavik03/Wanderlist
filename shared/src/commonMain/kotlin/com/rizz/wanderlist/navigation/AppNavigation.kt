@@ -35,6 +35,7 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.savedstate.serialization.SavedStateConfiguration
 import com.rizz.wanderlist.views.collection.CollectionDetailRoute
+import com.rizz.wanderlist.views.journey.JourneyReplayRoute
 import com.rizz.wanderlist.views.collection.CollectionsRoute
 import com.rizz.wanderlist.views.collection.CollectionFormRoute
 import com.rizz.wanderlist.views.home.HomeRoute
@@ -80,6 +81,7 @@ private val navConfig = SavedStateConfiguration {
             )
             subclass(Route.PlaceDetail::class, Route.PlaceDetail.serializer())
             subclass(Route.EditPlace::class, Route.EditPlace.serializer())
+            subclass(Route.JourneyReplay::class, Route.JourneyReplay.serializer())
 
         }
     }
@@ -278,7 +280,16 @@ fun AppNavigation(onSignOut: () -> Unit) {
                             backStack.add(Route.AddPlace)
                         },
                         onEdit = { backStack.add(Route.EditCollection(key.collectionId)) },
+                        onReplayJourney = { backStack.add(Route.JourneyReplay(key.collectionId)) },
                         onDeleted = { backStack.removeLastOrNull() }
+                    )
+                }
+
+                entry<Route.JourneyReplay> { key ->
+                    JourneyReplayRoute(
+                        collectionId = key.collectionId,
+                        onBack = { backStack.removeLastOrNull() },
+                        onPlaceClick = { id -> backStack.add(Route.PlaceDetail(id)) }
                     )
                 }
 

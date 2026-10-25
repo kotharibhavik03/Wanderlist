@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.rizz.wanderlist.domain.model.Place
 import com.rizz.wanderlist.domain.model.PlaceCollection
 import com.rizz.wanderlist.domain.model.PlacePhoto
+import com.rizz.wanderlist.domain.model.journeyOf
 import com.rizz.wanderlist.domain.repository.CollectionRepository
 import com.rizz.wanderlist.domain.repository.PlaceRepository
 import com.rizz.wanderlist.domain.usecase.DeleteCollectionUseCase
@@ -29,6 +30,9 @@ data class CollectionDetailUiState(
     val isDeleting: Boolean = false,
     val errorMessage: String? = null
 ) {
+    /** Enough dated visits to replay the collection as a journey. */
+    val canReplayJourney: Boolean get() = journeyOf(places).canReplay
+
     /** Every photo across all places: the "All photos" view. */
     val photos: List<CollectionPhoto>
         get() = places.flatMap { place ->

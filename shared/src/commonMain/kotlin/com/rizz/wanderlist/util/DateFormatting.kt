@@ -21,6 +21,16 @@ fun formatDate(epochMillis: Long): String {
     return "$day ${MONTHS[(month - 1).toInt()]} $year"
 }
 
+/**
+ * "12 Mar 2026" for a moment in time (e.g. when something was saved), on the device's calendar.
+ * [formatDate] is for dates stored as UTC midnight; a moment needs the local offset first, or
+ * anything saved in India before 5:30 am would show the day before.
+ */
+fun formatLocalDate(epochMillis: Long): String = formatDate(epochMillis + localUtcOffsetMillis(epochMillis))
+
+/** How far the device's time zone is ahead of UTC at [epochMillis] (daylight saving included). */
+expect fun localUtcOffsetMillis(epochMillis: Long): Long
+
 fun formatCoordinates(latitude: Double, longitude: Double): String {
     fun r(v: Double) = (round(v * 100_000) / 100_000).toString()
     return "${r(latitude)}, ${r(longitude)}"

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -83,6 +84,7 @@ fun CollectionDetailRoute(
     onPlaceClick: (placeId: String) -> Unit,
     onAddPlace: () -> Unit,
     onEdit: () -> Unit,
+    onReplayJourney: () -> Unit,
     onDeleted: () -> Unit
 ) {
     val viewModel: CollectionDetailViewModel =
@@ -104,6 +106,7 @@ fun CollectionDetailRoute(
         onPlaceClick = onPlaceClick,
         onAddPlace = onAddPlace,
         onEdit = onEdit,
+        onReplayJourney = onReplayJourney,
         onDeleteConfirmed = viewModel::onDeleteConfirmed,
         onErrorShown = viewModel::onErrorShown
     )
@@ -116,6 +119,7 @@ fun CollectionDetailScreen(
     onPlaceClick: (placeId: String) -> Unit,
     onAddPlace: () -> Unit,
     onEdit: () -> Unit,
+    onReplayJourney: () -> Unit,
     onDeleteConfirmed: () -> Unit,
     onErrorShown: () -> Unit
 ) {
@@ -144,6 +148,11 @@ fun CollectionDetailScreen(
                     }
                 },
                 actions = {
+                    if (collection != null && uiState.canReplayJourney && !uiState.isDeleting) {
+                        IconButton(onClick = onReplayJourney) {
+                            Icon(Icons.Default.Route, contentDescription = "Replay journey")
+                        }
+                    }
                     if (collection != null) {
                         Box {
                             IconButton(onClick = { showMenu = true }, enabled = !uiState.isDeleting) {

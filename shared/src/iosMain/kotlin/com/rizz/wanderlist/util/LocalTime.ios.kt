@@ -1,0 +1,9 @@
+package com.rizz.wanderlist.util
+
+import platform.Foundation.NSDate
+import platform.Foundation.NSTimeZone
+import platform.Foundation.dateWithTimeIntervalSince1970
+import platform.Foundation.localTimeZone
+
+actual fun localUtcOffsetMillis(epochMillis: Long): Long =
+    NSTimeZone.localTimeZone.secondsFromGMTForDate(NSDate.dateWithTimeIntervalSince1970(epochMillis / 1000.0)) * 1000L
