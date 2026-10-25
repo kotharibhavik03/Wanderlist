@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.rizz.wanderlist.domain.model.PlacePhoto
+import com.rizz.wanderlist.views.image.full
 
 /**
  * A photo in the viewer, with an optional caption (e.g. the place it belongs to). [canDelete]
@@ -82,7 +83,7 @@ internal fun PhotoViewer(
                 modifier = Modifier.fillMaxSize()
             ) { page ->
                 ZoomableImage(
-                    model = photos[page].photo.url,
+                    model = photos[page].photo.image.full,
                     contentDescription = photos[page].caption ?: "Photo ${page + 1} of ${photos.size}",
                     isCurrentPage = page == pagerState.currentPage,
                     onZoomedChange = { zoomed -> if (page == pagerState.currentPage) isZoomed = zoomed }

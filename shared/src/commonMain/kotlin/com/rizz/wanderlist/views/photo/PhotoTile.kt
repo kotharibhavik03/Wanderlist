@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.rizz.wanderlist.domain.model.PlacePhoto
+import com.rizz.wanderlist.views.image.thumbnail
 
 /** A photo thumbnail, cropped to fill, with a lock when it's private. Tap to open it. */
 @Composable
@@ -41,7 +42,7 @@ internal fun PhotoTile(
             .semantics { contentDescription = if (photo.isPrivate) "$description, only you can see it" else description }
     ) {
         AsyncImage(
-            model = photo.url,
+            model = photo.image.thumbnail,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()

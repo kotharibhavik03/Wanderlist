@@ -305,7 +305,7 @@ private fun Header(place: Place, access: PlaceAccess, collection: PlaceCollectio
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        PlaceMarker(place.markerStyle, collection, place.markerPhotoUrl, size = 64.dp)
+        PlaceMarker(place.markerStyle, collection, place.markerPhoto, size = 64.dp)
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(place.displayName, style = MaterialTheme.typography.titleLarge)
             // When the user renamed it, still show what the map calls it.

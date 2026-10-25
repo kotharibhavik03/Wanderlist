@@ -10,7 +10,10 @@ data class NewPlace(
  * A compressed photo waiting to be uploaded with a new place. [id] becomes the stored
  * photo's id, so a [MarkerStyle.Photo] picked before saving keeps pointing at it.
  */
-data class NewPlacePhoto(val id: String, val localPath: String, val isPrivate: Boolean)
+data class NewPlacePhoto(val id: String, val file: CompressedPhoto, val isPrivate: Boolean)
+
+/** A photo ready to upload: the compressed JPEG and its small copy, both local files. */
+data class CompressedPhoto(val path: String, val thumbnailPath: String)
 
 /** What an edit changes about a place's photos, applied when the edit is saved. */
 data class PhotoChanges(

@@ -14,21 +14,22 @@ import coil3.compose.LocalPlatformContext
 import coil3.compose.asPainter
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
+import com.rizz.wanderlist.domain.model.PhotoImage
 
 /**
- * Loads the image at [url] at [size] and returns it once it's ready; null while loading, on
- * failure, or without a URL. For images drawn off screen, such as map markers (rendered to a
+ * Loads [photo]'s thumbnail at [size] and returns it once it's ready; null while loading, on
+ * failure, or without a photo. For images drawn off screen, such as map markers (rendered to a
  * bitmap once), where an AsyncImage would be captured before it had loaded. The image is a
  * software bitmap: map markers are drawn on a software canvas, which crashes on hardware ones.
  */
 @Composable
-internal fun rememberLoadedPhoto(url: String?, size: Dp): Painter? {
+internal fun rememberLoadedPhoto(photo: PhotoImage?, size: Dp): Painter? {
     val context = LocalPlatformContext.current
     val sizePx = with(LocalDensity.current) { size.roundToPx() }
-    var painter by remember(url) { mutableStateOf<Painter?>(null) }
-    LaunchedEffect(url, sizePx) {
-        if (url == null) return@LaunchedEffect
-        val request = ImageRequest.Builder(context).data(url).size(sizePx).softwareBitmap().build()
+    var painter by remember(photo) { mutableStateOf<Painter?>(null) }
+    LaunchedEffect(photo, sizePx) {
+        if (photo == null) return@LaunchedEffect
+        val request = ImageRequest.Builder(context).data(photo.thumbnail).size(sizePx).softwareBitmap().build()
         val result = SingletonImageLoader.get(context).execute(request)
         painter = (result as? SuccessResult)?.image?.asPainter(context)
     }

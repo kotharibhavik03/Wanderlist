@@ -5,12 +5,21 @@ package com.rizz.wanderlist.domain.repository
  * provider can change without touching the rest of the app.
  */
 interface PhotoStorage {
+    /** Uploads the JPEG at [localPath] to [remotePath]. */
+    suspend fun upload(remotePath: String, localPath: String)
+
     /**
-     * Uploads the JPEG at [localPath] to [remotePath] and returns a URL the image can be
-     * downloaded from. Anyone holding the URL can download it, so only store it where the
-     * right people can read it.
+     * Downloads the file at [remotePath] as the signed-in user, so the storage's access rules
+     * decide whether they may. Null if there's no file there; throws if it can't be downloaded
+     * (no access, no connection).
      */
-    suspend fun upload(remotePath: String, localPath: String): String
+    suspend fun download(remotePath: String): ByteArray?
+
+    /**
+     * A public link to the file at [remotePath]: anyone holding it can download the file, with
+     * no access check. Only for files meant for every signed-in user (profile photos).
+     */
+    suspend fun publicUrl(remotePath: String): String
 
     /** Deletes the file at [remotePath]. */
     suspend fun delete(remotePath: String)

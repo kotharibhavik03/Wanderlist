@@ -208,7 +208,7 @@ class PlaceDetailViewModel(
         val draft = actionState.value.photoDraft ?: return
         if (!draft.canUpload) return
         // canUpload guarantees every photo is compressed by now.
-        val photos = draft.photos.mapNotNull { photo -> photo.localPath?.let { NewPlacePhoto(photo.id, it, photo.isPrivate) } }
+        val photos = draft.photos.mapNotNull { photo -> photo.file?.let { NewPlacePhoto(photo.id, it, photo.isPrivate) } }
         updateDraft { it.copy(upload = PhotoUploadProgress(0, photos.size)) }
 
         launchDraftWork {
@@ -219,7 +219,7 @@ class PlaceDetailViewModel(
             }.fold(
                 onSuccess = {
                     // Uploaded: the compressed copies aren't needed any more.
-                    photos.forEach { photoCompressor.discard(it.localPath) }
+                    photos.forEach { photoCompressor.discard(it.file) }
                     actionState.update {
                         it.copy(photoDraft = null, message = "Added ${pluralize(photos.size, "photo")}.")
                     }

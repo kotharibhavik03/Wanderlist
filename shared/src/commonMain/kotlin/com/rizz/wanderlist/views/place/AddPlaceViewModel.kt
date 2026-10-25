@@ -94,7 +94,7 @@ data class AddPlaceUiState(
         get() = PhotoChanges(
             // canSave guarantees every new photo is compressed by then.
             added = photos.filter { !it.isSaved }.mapNotNull { photo ->
-                photo.localPath?.let { NewPlacePhoto(photo.id, it, photo.isPrivate) }
+                photo.file?.let { NewPlacePhoto(photo.id, it, photo.isPrivate) }
             },
             privacy = photos
                 .filter { it.isSaved && originalPhotos[it.id]?.isPrivate?.let { was -> was != it.isPrivate } == true }
@@ -190,7 +190,7 @@ class AddPlaceViewModel(
                             DraftPhoto(
                                 id = photo.id,
                                 isPrivate = photo.isPrivate,
-                                url = photo.url,
+                                saved = photo.image,
                                 canRemove = place.canDeletePhoto(user, photo),
                                 canChangePrivacy = photo.uploaderId == user.id
                             )

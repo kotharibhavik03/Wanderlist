@@ -613,7 +613,7 @@ private fun SearchResults(
                                 )
                             }
                         },
-                        leadingContent = { PlaceMarker(place.markerStyle, item.collection, place.markerPhotoUrl) },
+                        leadingContent = { PlaceMarker(place.markerStyle, item.collection, place.markerPhoto) },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         modifier = Modifier.clickable { onPlaceClick(place.id) }
                     )

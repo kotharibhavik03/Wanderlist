@@ -96,9 +96,11 @@ class FirestoreProfileRepository(
         // photo is never shown under the new URL.
         val photoId = newPhotoId()
         val path = profilePhotoPath(user.id, photoId)
-        val url = photoStorage.upload(path, localPath)
+        photoStorage.upload(path, localPath)
 
         val previous = try {
+            // Profile photos are for every signed-in user, so a public link is what's shared.
+            val url = photoStorage.publicUrl(path)
             firestore.runTransaction {
                 val snapshot = get(reference)
                 val current = if (snapshot.exists) snapshot.data(ProfileDocument.serializer()) else null

@@ -82,7 +82,7 @@ class ProfileViewModel(
         updatePhoto(success = "Profile photo updated.", failure = "Couldn't change your photo.") {
             val compressed = photoCompressor.compress(source)
             try {
-                profileRepository.setMyPhoto(compressed)
+                profileRepository.setMyPhoto(compressed.path)
             } finally {
                 // Uploaded or not, the compressed copy isn't needed any more.
                 photoCompressor.discard(compressed)

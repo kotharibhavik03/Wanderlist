@@ -315,7 +315,7 @@ private fun PlaceCard(place: Place, collection: PlaceCollection, onClick: () -> 
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            PlaceMarker(place.markerStyle, collection, place.markerPhotoUrl)
+            PlaceMarker(place.markerStyle, collection, place.markerPhoto)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     place.displayName,

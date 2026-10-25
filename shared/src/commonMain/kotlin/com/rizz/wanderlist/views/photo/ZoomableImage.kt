@@ -45,7 +45,7 @@ private const val DoubleTapZoom = 2.5f
  */
 @Composable
 internal fun ZoomableImage(
-    model: String,
+    model: Any,
     contentDescription: String,
     isCurrentPage: Boolean,
     onZoomedChange: (Boolean) -> Unit,

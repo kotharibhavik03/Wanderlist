@@ -6,13 +6,16 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
+import com.rizz.wanderlist.domain.model.CompressedPhoto
 import com.rizz.wanderlist.domain.repository.PhotoCompressor
 import com.rizz.wanderlist.domain.repository.PhotoCompressor.Companion.JPEG_QUALITY
 import com.rizz.wanderlist.domain.repository.PhotoCompressor.Companion.MAX_EDGE_PX
+import com.rizz.wanderlist.domain.repository.PhotoCompressor.Companion.THUMBNAIL_SHORT_EDGE_PX
 import java.io.File
 import java.io.InputStream
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +27,7 @@ class AndroidPhotoCompressor(private val context: Context) : PhotoCompressor {
     private val directory get() = File(context.cacheDir, "photos").apply { mkdirs() }
 
     @OptIn(ExperimentalUuidApi::class)
-    override suspend fun compress(source: String): String = withContext(Dispatchers.IO) {
+    override suspend fun compress(source: String): CompressedPhoto = withContext(Dispatchers.IO) {
         val uri = Uri.parse(source)
 
         // 1. Read only the dimensions, so the full-size photo is never held in memory.
@@ -44,18 +47,37 @@ class AndroidPhotoCompressor(private val context: Context) : PhotoCompressor {
         val matrix = orientation(uri).apply { postScale(scale, scale) }
         val result = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
 
-        val file = File(directory, "${Uuid.random().toHexString()}.jpg")
+        // 4. The thumbnail, scaled down from the upright photo.
+        val thumbnailScale = min(1f, THUMBNAIL_SHORT_EDGE_PX.toFloat() / min(result.width, result.height))
+        val thumbnail = Bitmap.createScaledBitmap(
+            result,
+            (result.width * thumbnailScale).roundToInt().coerceAtLeast(1),
+            (result.height * thumbnailScale).roundToInt().coerceAtLeast(1),
+            true
+        )
+
+        val name = Uuid.random().toHexString()
+        val file = File(directory, "$name.jpg")
+        val thumbnailFile = File(directory, "${name}_thumb.jpg")
         try {
             file.outputStream().use { result.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }
+            thumbnailFile.outputStream().use { thumbnail.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }
+        } catch (e: Exception) {
+            file.delete()
+            thumbnailFile.delete()
+            throw e
         } finally {
+            // createBitmap / createScaledBitmap return their input when nothing changes.
+            if (thumbnail !== result) thumbnail.recycle()
             if (result !== decoded) result.recycle()
             decoded.recycle()
         }
-        file.absolutePath
+        CompressedPhoto(path = file.absolutePath, thumbnailPath = thumbnailFile.absolutePath)
     }
 
-    override fun discard(compressedPath: String) {
-        File(compressedPath).delete()
+    override fun discard(photo: CompressedPhoto) {
+        File(photo.path).delete()
+        File(photo.thumbnailPath).delete()
     }
 
     private fun open(uri: Uri): InputStream =

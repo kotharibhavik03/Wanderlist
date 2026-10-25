@@ -2,6 +2,7 @@ package com.rizz.wanderlist.data.firestore
 
 import com.rizz.wanderlist.domain.model.MarkerStyle
 import com.rizz.wanderlist.domain.model.MemberRole
+import com.rizz.wanderlist.domain.model.PhotoImage
 import com.rizz.wanderlist.domain.model.Place
 import com.rizz.wanderlist.domain.model.PlaceDetails
 import com.rizz.wanderlist.domain.model.PlaceMember
@@ -55,7 +56,10 @@ internal data class MarkerDocument(
     val type: String = TYPE_COLLECTION,
     val iconKey: String? = null,
     val photoId: String? = null,
-    /** The marker photo's download URL, copied from its (shared) photo document when saved. */
+    /**
+     * Only on places saved before files were loaded by location: the marker photo's public
+     * download link. Never read; written as null, and the photo migration script removes it.
+     */
     val photoUrl: String? = null
 ) {
     companion object {
@@ -87,7 +91,9 @@ internal fun PlaceDocument.toDomain(id: String) = Place(
     rating = rating,
     notes = notes,
     photos = emptyList(),
-    markerStyle = marker.toDomain(),
+    // The marker photo's uploader is in the photo index. Places saved before the index only
+    // have the owner's photos (nobody else could add any then).
+    markerStyle = marker.toDomain { photoId -> photoImage(id, photoUploaders[photoId] ?: ownerId, photoId) },
     members = members.map { it.toDomain() },
     createdAtEpochMillis = createdAt,
     updatedAtEpochMillis = updatedAt
@@ -167,16 +173,17 @@ internal fun PlaceDocument.withoutPhotos(photoIds: Set<String>) = copy(
     marker = if (marker.type == MarkerDocument.TYPE_PHOTO && marker.photoId in photoIds) MarkerDocument() else marker
 )
 
-private fun MarkerDocument.toDomain(): MarkerStyle = when (type) {
+/** The marker; a photo marker's files are found by [imageOf]. */
+private fun MarkerDocument.toDomain(imageOf: (photoId: String) -> PhotoImage): MarkerStyle = when (type) {
     MarkerDocument.TYPE_ICON -> iconKey?.let { MarkerStyle.Icon(it) } ?: MarkerStyle.CollectionDefault
-    MarkerDocument.TYPE_PHOTO -> photoId?.let { MarkerStyle.Photo(it, photoUrl) } ?: MarkerStyle.CollectionDefault
+    MarkerDocument.TYPE_PHOTO -> photoId?.let { MarkerStyle.Photo(it, imageOf(it)) } ?: MarkerStyle.CollectionDefault
     else -> MarkerStyle.CollectionDefault
 }
 
 private fun MarkerStyle.toDocument(): MarkerDocument = when (this) {
     MarkerStyle.CollectionDefault -> MarkerDocument(MarkerDocument.TYPE_COLLECTION)
     is MarkerStyle.Icon -> MarkerDocument(MarkerDocument.TYPE_ICON, iconKey = iconKey)
-    is MarkerStyle.Photo -> MarkerDocument(MarkerDocument.TYPE_PHOTO, photoId = photoId, photoUrl = url)
+    is MarkerStyle.Photo -> MarkerDocument(MarkerDocument.TYPE_PHOTO, photoId = photoId)
 }
 
 private fun MemberDocument.toDomain() = PlaceMember(

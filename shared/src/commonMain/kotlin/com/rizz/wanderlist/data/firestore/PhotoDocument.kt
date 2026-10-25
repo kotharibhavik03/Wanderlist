@@ -1,5 +1,6 @@
 package com.rizz.wanderlist.data.firestore
 
+import com.rizz.wanderlist.domain.model.PhotoImage
 import com.rizz.wanderlist.domain.model.PlacePhoto
 import kotlinx.serialization.Serializable
 
@@ -7,28 +8,37 @@ import kotlinx.serialization.Serializable
  * How a photo is stored in Firestore at `places/{placeId}/photos/{photoId}`. One document per
  * photo, so firestore.rules can hide a private photo from everyone but its uploader (rules
  * can't hide part of a document). Field names are checked by firestore.rules.
+ *
+ * Its files' location follows from the place, the uploader and the photo id ([photoImage]), so
+ * nothing about Storage is stored here.
  */
 @Serializable
 internal data class PhotoDocument(
     val uploaderId: String = "",
-    /** Firebase Storage download URL. Anyone holding it can download the file. */
-    val url: String = "",
+    /**
+     * Only on photos saved before files were loaded by location: their public download link.
+     * Never read, never written; the photo migration script removes it.
+     */
+    val url: String? = null,
     val isPrivate: Boolean = false,
     /** Client clock, epoch millis. */
     val createdAt: Long = 0
 )
 
-internal fun PhotoDocument.toDomain(id: String) = PlacePhoto(
+internal fun PhotoDocument.toDomain(placeId: String, id: String) = PlacePhoto(
     id = id,
     uploaderId = uploaderId,
-    url = url,
+    image = photoImage(placeId, uploaderId, id),
     isPrivate = isPrivate,
     createdAtEpochMillis = createdAt
 )
 
 /**
- * Where a photo's file lives in Storage. The uploader's id is part of the path, so
- * storage.rules can let people write and delete only their own files.
+ * Where a photo's files live in Storage. The uploader's id is part of the path, so
+ * storage.rules can let people write and delete only their own files, and the photo id lets
+ * it find the photo's document to decide who may download them.
  */
-internal fun photoStoragePath(placeId: String, uploaderId: String, photoId: String) =
-    "places/$placeId/$uploaderId/$photoId.jpg"
+internal fun photoImage(placeId: String, uploaderId: String, photoId: String) = PhotoImage(
+    path = "places/$placeId/$uploaderId/$photoId.jpg",
+    thumbnailPath = "places/$placeId/$uploaderId/${photoId}_thumb.jpg"
+)

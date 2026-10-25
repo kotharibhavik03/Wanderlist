@@ -84,7 +84,7 @@ internal fun PlaceSheetContent(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                PlaceMarker(place.markerStyle, item.collection, place.markerPhotoUrl, size = 48.dp)
+                PlaceMarker(place.markerStyle, item.collection, place.markerPhoto, size = 48.dp)
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         place.displayName,

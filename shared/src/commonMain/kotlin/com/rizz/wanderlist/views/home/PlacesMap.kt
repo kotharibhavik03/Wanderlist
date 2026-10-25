@@ -149,7 +149,7 @@ internal fun PlacesMap(
                     val isSelected = place.id == selectedPlaceId
                     // Loaded here, not inside the marker: the marker is drawn to a bitmap once,
                     // and redrawn when its keys change, so it's redrawn when the photo arrives.
-                    val photo = rememberLoadedPhoto(place.markerPhotoUrl, SelectedBadgeSize)
+                    val photo = rememberLoadedPhoto(place.markerPhoto, SelectedBadgeSize)
                     MarkerComposable(
                         // Re-render the marker image only when its look changes.
                         place.markerStyle, item.collection?.icon.orEmpty(), item.collection?.colors.orEmpty(), isSelected,
@@ -210,7 +210,7 @@ private fun MapBadge(item: HomePlace, isSelected: Boolean, photo: Painter?, scal
             contentAlignment = Alignment.Center
         ) {
             // No URL here, only the loaded photo: until it arrives the marker shows the collection badge.
-            PlaceMarker(item.place.markerStyle, item.collection, photoUrl = null, size = badgeSize, loadedPhoto = photo)
+            PlaceMarker(item.place.markerStyle, item.collection, photo = null, size = badgeSize, loadedPhoto = photo)
         }
         MarkerTail(
             ringColor,

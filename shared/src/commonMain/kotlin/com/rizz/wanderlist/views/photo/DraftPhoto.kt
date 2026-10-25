@@ -22,30 +22,33 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.rizz.wanderlist.domain.model.CompressedPhoto
+import com.rizz.wanderlist.domain.model.PhotoImage
+import com.rizz.wanderlist.views.image.thumbnail
 
 /**
  * A photo in a form: either picked and not uploaded yet, or already on the place being edited.
  *
- * New: [localPath] is null while it's being compressed, then it's the small JPEG that's shown
+ * New: [file] is null while it's being compressed, then it's the compressed JPEGs that are shown
  * and uploaded. [id] becomes the saved photo's id, so a photo marker chosen before saving still
  * points at it afterwards.
  *
- * Already saved: [url] is where it's stored. [canRemove] and [canChangePrivacy] say what this
+ * Already saved: [saved] is where it's stored. [canRemove] and [canChangePrivacy] say what this
  * user may do with it (someone else's photo can't be locked, and only the owner may remove it).
  */
 data class DraftPhoto(
     val id: String,
-    val localPath: String? = null,
+    val file: CompressedPhoto? = null,
     val isPrivate: Boolean = false,
-    val url: String? = null,
+    val saved: PhotoImage? = null,
     val canRemove: Boolean = true,
     val canChangePrivacy: Boolean = true
 ) {
-    val isSaved: Boolean get() = url != null
-    val isReady: Boolean get() = isSaved || localPath != null
+    val isSaved: Boolean get() = saved != null
+    val isReady: Boolean get() = isSaved || file != null
 
-    /** What to draw: the stored photo, or the compressed file. Null while compressing. */
-    val image: String? get() = url ?: localPath
+    /** What to draw: the stored photo's thumbnail, or the compressed one. Null while compressing. */
+    val image: Any? get() = saved?.thumbnail ?: file?.thumbnailPath
 }
 
 /** How far the photo uploads have got while saving. */

@@ -91,7 +91,7 @@ class FirestorePlaceRepository(
         val now = now()
         val reference = places.document // new auto-id, known before anything is written
         // The place is written with its first photos; the rest follow a few at a time. A photo
-        // marker's photo goes in that first write, because the place stores the photo's URL.
+        // marker's photo goes in that first write, so the marker never shows a missing photo.
         val markerPhotoId = (newPlace.details.markerStyle as? MarkerStyle.Photo)?.photoId
         val ordered = newPlace.photos.sortedByDescending { it.id == markerPhotoId }
         val firstPhotos = ordered.take(PHOTOS_PER_WRITE)
@@ -99,9 +99,9 @@ class FirestorePlaceRepository(
 
         val created = withUploadedPhotos(reference.id, owner, firstPhotos, now, onPhotoUploaded) { photos ->
             // The place and its first photo documents in one batch: they appear together or not at all.
-            // A photo marker stores its photo's URL, so the map can draw it without the photos.
-            val details = newPlace.details.withMarkerPhotoUrl { photoId ->
-                photos.firstOrNull { (id, photo) -> id == photoId && !photo.isPrivate }?.second?.url
+            // A photo marker must be one of these photos, and a shared one.
+            val details = newPlace.details.withValidMarkerPhoto { photoId ->
+                photos.any { (id, photo) -> id == photoId && !photo.isPrivate }
             }
             val document = details.toDocument(
                 owner = PlaceOwner(id = owner.id, name = owner.displayName, email = owner.email?.lowercase()),
@@ -117,7 +117,7 @@ class FirestorePlaceRepository(
             }
             batch.commit()
 
-            document.toDomain(reference.id).copy(photos = photos.map { (id, photo) -> photo.toDomain(id) })
+            document.toDomain(reference.id).copy(photos = photos.map { (id, photo) -> photo.toDomain(reference.id, id) })
         }
         if (laterPhotos.isEmpty()) return created
 
@@ -164,20 +164,16 @@ class FirestorePlaceRepository(
                 )
                 PlaceAccess.VISITED_WITH, null -> error("You can't edit this place.")
             }
-            // A photo marker must be one of the place's shared photos; its URL comes from the
-            // photo's own document, never from the client.
+            // A photo marker must be one of the place's shared photos.
             val marker = allowed.markerStyle
-            val checked = if (marker is MarkerStyle.Photo) {
+            if (marker is MarkerStyle.Photo) {
                 val photo = get(reference.collection(PHOTOS).document(marker.photoId))
                 require(photo.exists && !photo.data(PhotoDocument.serializer()).isPrivate) {
                     "The marker photo must be one of the shared photos."
                 }
-                allowed.copy(markerStyle = marker.copy(url = photo.data(PhotoDocument.serializer()).url))
-            } else {
-                allowed
             }
 
-            val updated = checked.toDocument(owner = current.owner, createdAt = current.createdAt, updatedAt = now())
+            val updated = allowed.toDocument(owner = current.owner, createdAt = current.createdAt, updatedAt = now())
                 .copy(photoUploaders = current.photoUploaders - removedPhotos.keys)
             if (access == PlaceAccess.OWNER) {
                 set(reference, PlaceDocument.serializer(), updated) { encodeDefaults = true }
@@ -332,7 +328,7 @@ class FirestorePlaceRepository(
                         }
                     }
                 }
-                uploaded.map { (photoId, photo) -> photo.toDomain(photoId) }
+                uploaded.map { (photoId, photo) -> photo.toDomain(placeId, photoId) }
             }
             uploadedBefore += group.size
             added
@@ -341,9 +337,10 @@ class FirestorePlaceRepository(
 
     /**
      * Uploads [photos] as [uploader]'s, one at a time so progress is simple and memory stays low,
-     * then runs [save] with their documents (photo id to document). If anything fails, or the
-     * work is cancelled, the uploaded files are deleted again: nothing was saved, so they'd be
-     * orphans. A file that can't be deleted right then is left behind.
+     * then runs [save] with their documents (photo id to document). Each photo is two files, the
+     * photo and its thumbnail. If anything fails, or the work is cancelled, the uploaded files are
+     * deleted again: nothing was saved, so they'd be orphans. A file that can't be deleted right
+     * then is left behind.
      */
     private suspend fun <T> withUploadedPhotos(
         placeId: String,
@@ -356,11 +353,13 @@ class FirestorePlaceRepository(
         val uploadedPaths = mutableListOf<String>()
         try {
             val documents = photos.mapIndexed { index, photo ->
-                val path = photoStoragePath(placeId, uploader.id, photo.id)
-                val url = photoStorage.upload(path, photo.localPath)
-                uploadedPaths += path
+                val image = photoImage(placeId, uploader.id, photo.id)
+                photoStorage.upload(image.path, photo.file.path)
+                uploadedPaths += image.path
+                photoStorage.upload(image.thumbnailPath, photo.file.thumbnailPath)
+                uploadedPaths += image.thumbnailPath
                 onPhotoUploaded(index + 1)
-                photo.id to PhotoDocument(uploaderId = uploader.id, url = url, isPrivate = photo.isPrivate, createdAt = createdAt)
+                photo.id to PhotoDocument(uploaderId = uploader.id, isPrivate = photo.isPrivate, createdAt = createdAt)
             }
             return save(documents)
         } catch (e: Throwable) {
@@ -433,12 +432,15 @@ class FirestorePlaceRepository(
     }
 
     /**
-     * Deletes photo files (id to uploader). Best effort: a file that is already gone, or can't be
-     * deleted right now, is left behind; its document is already deleted, so nobody can find it.
+     * Deletes photo files (id to uploader): each photo and its thumbnail. Best effort: a file that
+     * is already gone (photos saved before thumbnails have none), or can't be deleted right now, is
+     * left behind; its document is already deleted, so nobody can find it.
      */
     private suspend fun deletePhotoFiles(placeId: String, photos: Map<String, String>) {
         photos.forEach { (photoId, uploaderId) ->
-            resultOf { photoStorage.delete(photoStoragePath(placeId, uploaderId, photoId)) }
+            val image = photoImage(placeId, uploaderId, photoId)
+            resultOf { photoStorage.delete(image.path) }
+            resultOf { photoStorage.delete(image.thumbnailPath) }
         }
     }
 
@@ -449,8 +451,8 @@ class FirestorePlaceRepository(
      */
     private fun photosOf(placeId: String, user: User): Flow<List<PlacePhoto>> {
         val photos = places.document(placeId).collection(PHOTOS)
-        val shared = photos.where { "isPrivate" equalTo false }.snapshots.map { it.toPhotos() }
-        val mine = photos.where { "uploaderId" equalTo user.id }.snapshots.map { it.toPhotos() }
+        val shared = photos.where { "isPrivate" equalTo false }.snapshots.map { it.toPhotos(placeId) }
+        val mine = photos.where { "uploaderId" equalTo user.id }.snapshots.map { it.toPhotos(placeId) }
         return combine(shared, mine) { sharedPhotos, myPhotos ->
             (sharedPhotos + myPhotos).distinctBy { it.id }.sortedBy { it.createdAtEpochMillis }
         }.catch { emit(emptyList()) }
@@ -502,14 +504,13 @@ class FirestorePlaceRepository(
     private fun QuerySnapshot.toPlaces(): List<Place> =
         documents.map { it.data<PlaceDocument>().toDomain(it.id) }
 
-    private fun QuerySnapshot.toPhotos(): List<PlacePhoto> =
-        documents.map { it.data<PhotoDocument>().toDomain(it.id) }
+    private fun QuerySnapshot.toPhotos(placeId: String): List<PlacePhoto> =
+        documents.map { it.data<PhotoDocument>().toDomain(placeId, it.id) }
 
-    /** [this] with a photo marker's URL filled in by [urlOf], or the collection default if it has none. */
-    private fun PlaceDetails.withMarkerPhotoUrl(urlOf: (photoId: String) -> String?): PlaceDetails {
+    /** [this], or with the collection default instead of a photo marker whose photo [isValid] rejects. */
+    private fun PlaceDetails.withValidMarkerPhoto(isValid: (photoId: String) -> Boolean): PlaceDetails {
         val marker = markerStyle as? MarkerStyle.Photo ?: return this
-        val url = urlOf(marker.photoId)
-        return copy(markerStyle = if (url != null) marker.copy(url = url) else MarkerStyle.CollectionDefault)
+        return if (isValid(marker.photoId)) this else copy(markerStyle = MarkerStyle.CollectionDefault)
     }
 
     /** A photo marker showing one of [photoIds] (photos being deleted) becomes the collection default. */

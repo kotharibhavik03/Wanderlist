@@ -1,5 +1,6 @@
 package com.rizz.wanderlist.views.photo
 
+import com.rizz.wanderlist.domain.model.CompressedPhoto
 import com.rizz.wanderlist.domain.repository.PhotoCompressor
 import com.rizz.wanderlist.util.pluralize
 import com.rizz.wanderlist.util.resultOf
@@ -40,7 +41,7 @@ internal class DraftPhotos(
         var failed = 0
         pending.forEach { item ->
             resultOf { compressor.compress(item.source) }.fold(
-                onSuccess = { path -> attach(item.photo.id, path) },
+                onSuccess = { file -> attach(item.photo.id, file) },
                 onFailure = {
                     failed++
                     updatePhotos { photos -> photos.filterNot { it.id == item.photo.id } }
@@ -52,18 +53,18 @@ internal class DraftPhotos(
 
     /** Deletes the compressed files of [photos] (photos already on a place have none). */
     fun discard(photos: List<DraftPhoto>) {
-        photos.forEach { photo -> photo.localPath?.let(compressor::discard) }
+        photos.forEach { photo -> photo.file?.let(compressor::discard) }
     }
 
-    /** Puts a compressed file on its draft photo, or deletes it if the photo was removed meanwhile. */
-    private fun attach(photoId: String, path: String) {
+    /** Puts the compressed files on their draft photo, or deletes them if the photo was removed meanwhile. */
+    private fun attach(photoId: String, file: CompressedPhoto) {
         var attached = false
         updatePhotos { photos ->
             // Set on every attempt: the last one is what was actually stored.
             attached = photos.any { it.id == photoId }
-            photos.map { if (it.id == photoId) it.copy(localPath = path) else it }
+            photos.map { if (it.id == photoId) it.copy(file = file) else it }
         }
-        if (!attached) compressor.discard(path)
+        if (!attached) compressor.discard(file)
     }
 
     @OptIn(ExperimentalUuidApi::class)

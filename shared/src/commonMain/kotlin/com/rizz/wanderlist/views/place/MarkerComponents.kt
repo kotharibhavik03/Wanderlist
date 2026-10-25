@@ -22,7 +22,9 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
 import com.rizz.wanderlist.domain.model.MarkerStyle
+import com.rizz.wanderlist.domain.model.PhotoImage
 import com.rizz.wanderlist.domain.model.PlaceCollection
+import com.rizz.wanderlist.views.image.thumbnail
 
 internal val markerIcons = listOf(
     "location" to "📍",
@@ -63,7 +65,7 @@ internal fun markerEmoji(key: String): String =
 
 /**
  * A place's marker, used everywhere a place is shown (lists, sheet, detail, map).
- * A photo marker draws [photoUrl] (pass `place.markerPhotoUrl`), or [loadedPhoto] when the
+ * A photo marker draws [photo]'s thumbnail (pass `place.markerPhoto`), or [loadedPhoto] when the
  * caller already loaded it (the map does: its markers are rendered to a bitmap once). Without
  * either it falls back to the collection's badge.
  */
@@ -71,7 +73,7 @@ internal fun markerEmoji(key: String): String =
 internal fun PlaceMarker(
     style: MarkerStyle,
     collection: PlaceCollection?,
-    photoUrl: String?,
+    photo: PhotoImage?,
     size: Dp = 44.dp,
     loadedPhoto: Painter? = null
 ) {
@@ -83,8 +85,8 @@ internal fun PlaceMarker(
     when {
         style is MarkerStyle.Photo && loadedPhoto != null ->
             Image(loadedPhoto, contentDescription = null, contentScale = ContentScale.Crop, modifier = photoModifier)
-        style is MarkerStyle.Photo && photoUrl != null ->
-            AsyncImage(photoUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = photoModifier)
+        style is MarkerStyle.Photo && photo != null ->
+            AsyncImage(photo.thumbnail, contentDescription = null, contentScale = ContentScale.Crop, modifier = photoModifier)
         style is MarkerStyle.Icon -> MarkerBadge(markerEmoji(style.iconKey), brush, size)
         else -> MarkerBadge(collection?.icon ?: "📍", brush, size)
     }
