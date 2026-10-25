@@ -42,10 +42,14 @@ private const val DoubleTapZoom = 2.5f
  * At normal size a one-finger drag is left alone, so the pager around it can swipe to the next
  * photo; [onZoomedChange] tells it when to stop swiping. The zoom resets when [isCurrentPage]
  * turns false (the user swiped away).
+ *
+ * [preview] (a smaller copy of the same photo, usually already cached) shows at once, so the
+ * viewer never opens on black; [model] fades in over it once downloaded.
  */
 @Composable
 internal fun ZoomableImage(
     model: Any,
+    preview: Any?,
     contentDescription: String,
     isCurrentPage: Boolean,
     onZoomedChange: (Boolean) -> Unit,
@@ -57,6 +61,8 @@ internal fun ZoomableImage(
     var size by remember { mutableStateOf(IntSize.Zero) }
     // The photo's own size once loaded; it's drawn fitted inside [size], often with bars.
     var photoSize by remember { mutableStateOf(Size.Unspecified) }
+    // Once the full photo is shown, the preview underneath stops being drawn.
+    var isLoaded by remember { mutableStateOf(false) }
     val currentOnZoomedChange by rememberUpdatedState(onZoomedChange)
 
     // The furthest the photo may move at [atScale] before an edge of the photo (not of the
@@ -116,19 +122,35 @@ internal fun ZoomableImage(
                 }
             }
     ) {
+        // Both images zoom and pan together; they're the same photo, so they line up exactly.
+        val zoomed = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                translationX = offset.x
+                translationY = offset.y
+            }
+        if (preview != null && !isLoaded) {
+            AsyncImage(
+                model = preview,
+                // The full photo below carries the description; this is only its stand-in.
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                // Same shape as the full photo, so zoom limits work before it arrives.
+                onSuccess = { state -> if (photoSize.isUnspecified) photoSize = state.painter.intrinsicSize },
+                modifier = zoomed
+            )
+        }
         AsyncImage(
             model = model,
             contentDescription = contentDescription,
             contentScale = ContentScale.Fit,
-            onSuccess = { state -> photoSize = state.painter.intrinsicSize },
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = offset.x
-                    translationY = offset.y
-                }
+            onSuccess = { state ->
+                photoSize = state.painter.intrinsicSize
+                isLoaded = true
+            },
+            modifier = zoomed
         )
     }
 }

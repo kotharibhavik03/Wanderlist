@@ -1,82 +1,48 @@
 package com.rizz.wanderlist.views.image
 
-import coil3.ImageLoader
-import coil3.decode.DataSource
-import coil3.decode.ImageSource
-import coil3.fetch.FetchResult
-import coil3.fetch.Fetcher
-import coil3.fetch.SourceFetchResult
-import coil3.key.Keyer
+import coil3.Uri
+import coil3.map.Mapper
 import coil3.request.Options
+import coil3.toUri
 import com.rizz.wanderlist.domain.model.PhotoImage
 import com.rizz.wanderlist.domain.repository.PhotoStorage
-import okio.Buffer
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.HttpClientEngine
+import io.ktor.client.plugins.api.createClientPlugin
 
-/**
- * A file in photo storage, as something Coil can load: `AsyncImage(model = photo.image.thumbnail)`.
- * If there's no file at [path], [fallbackPath] is loaded instead.
- */
-internal data class StoredPhoto(val path: String, val fallbackPath: String? = null)
+/** A file in photo storage, as something Coil can load: `AsyncImage(model = photo.image.thumbnail)`. */
+internal data class StoredPhoto(val path: String)
 
-/** The photo's small copy, for tiles and markers. Photos saved before thumbnails existed fall back to the photo. */
-internal val PhotoImage.thumbnail: StoredPhoto get() = StoredPhoto(thumbnailPath, fallbackPath = path)
+/** The photo's small copy, for tiles and markers. */
+internal val PhotoImage.thumbnail: StoredPhoto get() = StoredPhoto(thumbnailPath)
 
 /** The full photo, for the viewer. */
 internal val PhotoImage.full: StoredPhoto get() = StoredPhoto(path)
 
 /**
- * Loads a [StoredPhoto] through [PhotoStorage], which downloads as the signed-in user, so the
- * storage's rules decide every time whether they may see it. Downloads are kept in Coil's disk
- * cache under their path, so a photo seen once loads from the device after that, offline too.
+ * Turns a [StoredPhoto] into its download address, which Coil's network loader then fetches
+ * and keeps in its disk cache (the address holds no token, so it's the same every time).
  */
-internal class StoredPhotoFetcher(
-    private val photo: StoredPhoto,
-    private val options: Options,
-    private val imageLoader: ImageLoader,
-    private val storage: PhotoStorage
-) : Fetcher {
+internal class StoredPhotoMapper(private val storage: PhotoStorage) : Mapper<StoredPhoto, Uri> {
+    override fun map(data: StoredPhoto, options: Options): Uri = storage.downloadUrl(data.path).toUri()
+}
 
-    override suspend fun fetch(): FetchResult {
-        val (source, dataSource) = load(photo.path)
-            ?: photo.fallbackPath?.let { load(it) }
-            ?: error("There's no photo at ${photo.path}.")
-        return SourceFetchResult(source, mimeType = "image/jpeg", dataSource = dataSource)
-    }
-
-    /** The file at [path], from the disk cache if it's there, else downloaded (and cached). Null if there's no such file. */
-    private suspend fun load(path: String): Pair<ImageSource, DataSource>? {
-        val diskCache = imageLoader.diskCache
-        if (diskCache != null && options.diskCachePolicy.readEnabled) {
-            diskCache.openSnapshot(path)?.let { snapshot ->
-                return ImageSource(snapshot.data, diskCache.fileSystem, path, snapshot) to DataSource.DISK
-            }
-        }
-
-        val bytes = storage.download(path) ?: return null
-
-        if (diskCache != null && options.diskCachePolicy.writeEnabled) {
-            diskCache.openEditor(path)?.let { editor ->
-                try {
-                    diskCache.fileSystem.write(editor.data) { write(bytes) }
-                    editor.commitAndOpenSnapshot()?.let { snapshot ->
-                        return ImageSource(snapshot.data, diskCache.fileSystem, path, snapshot) to DataSource.NETWORK
-                    }
-                } catch (e: Exception) {
-                    // Not cached this time; the photo is still shown from memory below.
-                    runCatching { editor.abort() }
+/**
+ * The HTTP client Coil downloads with. Requests for stored photos get the signed-in user's
+ * headers from [storage] (added just before sending, so they're always current), and the
+ * storage's rules decide whether that user may see the photo.
+ */
+internal fun photoHttpClient(storage: PhotoStorage): HttpClient = HttpClient(photoHttpEngine()) {
+    install(
+        createClientPlugin("PhotoStorageAuth") {
+            onRequest { request, _ ->
+                storage.downloadHeaders(request.url.buildString()).forEach { (name, value) ->
+                    request.headers[name] = value
                 }
             }
         }
-        return ImageSource(Buffer().write(bytes), options.fileSystem) to DataSource.NETWORK
-    }
-
-    class Factory(private val storage: PhotoStorage) : Fetcher.Factory<StoredPhoto> {
-        override fun create(data: StoredPhoto, options: Options, imageLoader: ImageLoader): Fetcher =
-            StoredPhotoFetcher(data, options, imageLoader, storage)
-    }
+    )
 }
 
-/** Coil's memory cache key for a [StoredPhoto]: its path (Coil adds the requested size). */
-internal object StoredPhotoKeyer : Keyer<StoredPhoto> {
-    override fun key(data: StoredPhoto, options: Options): String = data.path
-}
+/** The platform's HTTP engine, set up to download a screen of photos at once. */
+internal expect fun photoHttpEngine(): HttpClientEngine

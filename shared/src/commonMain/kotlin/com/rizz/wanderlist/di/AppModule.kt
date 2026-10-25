@@ -27,6 +27,7 @@ import com.rizz.wanderlist.views.place.AddPlaceViewModel
 import com.rizz.wanderlist.views.place.PlaceDetailViewModel
 import com.rizz.wanderlist.views.profile.ProfileViewModel
 import dev.gitlive.firebase.Firebase
+import dev.gitlive.firebase.auth.auth
 import dev.gitlive.firebase.firestore.firestore
 import dev.gitlive.firebase.storage.storage
 import org.koin.core.module.dsl.viewModel
@@ -35,7 +36,8 @@ import org.koin.dsl.module
 val appModule = module {
     single { Firebase.firestore }
     single { Firebase.storage }
-    single<PhotoStorage> { FirebasePhotoStorage(get()) }
+    single { Firebase.auth }
+    single<PhotoStorage> { FirebasePhotoStorage(get(), get()) }
     single<CollectionRepository> { FirestoreCollectionRepository(get(), get()) }
     factory { SaveCollectionUseCase(get()) }
     factory { DeleteCollectionUseCase(get(), get()) }

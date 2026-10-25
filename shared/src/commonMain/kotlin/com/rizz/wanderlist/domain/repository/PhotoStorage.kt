@@ -9,11 +9,17 @@ interface PhotoStorage {
     suspend fun upload(remotePath: String, localPath: String)
 
     /**
-     * Downloads the file at [remotePath] as the signed-in user, so the storage's access rules
-     * decide whether they may. Null if there's no file there; throws if it can't be downloaded
-     * (no access, no connection).
+     * The HTTPS address of the file at [remotePath], to download it as the signed-in user with
+     * [downloadHeaders]. It holds no access token: on its own it downloads nothing.
      */
-    suspend fun download(remotePath: String): ByteArray?
+    fun downloadUrl(remotePath: String): String
+
+    /**
+     * The headers that make a request to [url] the signed-in user's, when it's one of
+     * [downloadUrl]'s addresses (none otherwise). The storage's access rules then decide, on
+     * every download, whether they may see the file.
+     */
+    suspend fun downloadHeaders(url: String): Map<String, String>
 
     /**
      * A public link to the file at [remotePath]: anyone holding it can download the file, with

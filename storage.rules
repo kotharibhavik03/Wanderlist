@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Wanderlist Storage rules: photo files. Place photos are downloaded through the SDK as the
+// Wanderlist Storage rules: photo files. Place photos are downloaded over HTTPS as the
 // signed-in user, so these rules check every download against the place and the photo's
 // document in Firestore (who's on the place, and whether the photo is private).
 // Deploy after every change (see README).

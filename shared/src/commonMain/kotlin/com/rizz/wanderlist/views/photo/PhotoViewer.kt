@@ -42,6 +42,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.rizz.wanderlist.domain.model.PlacePhoto
 import com.rizz.wanderlist.views.image.full
+import com.rizz.wanderlist.views.image.thumbnail
 
 /**
  * A photo in the viewer, with an optional caption (e.g. the place it belongs to). [canDelete]
@@ -80,10 +81,13 @@ internal fun PhotoViewer(
                 key = { photos[it].photo.id },
                 // A zoomed photo pans with one finger instead of swiping to the next one.
                 userScrollEnabled = !isZoomed,
+                // The photos either side are composed (so downloaded) ahead of time, ready to swipe to.
+                beyondViewportPageCount = 1,
                 modifier = Modifier.fillMaxSize()
             ) { page ->
                 ZoomableImage(
                     model = photos[page].photo.image.full,
+                    preview = photos[page].photo.image.thumbnail,
                     contentDescription = photos[page].caption ?: "Photo ${page + 1} of ${photos.size}",
                     isCurrentPage = page == pagerState.currentPage,
                     onZoomedChange = { zoomed -> if (page == pagerState.currentPage) isZoomed = zoomed }
