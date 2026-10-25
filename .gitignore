@@ -24,3 +24,6 @@ androidApp/google-services.json
 iosApp/Configuration/Secrets.xcconfig
 .firebase/
 .swiftpm-locks/**/swiftPMCheckout/
+# Firebase service account keys (e.g. for tools/migrate-photos): never commit one
+*-firebase-adminsdk-*.json
+*service-account*.json
